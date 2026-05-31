@@ -213,8 +213,17 @@ def get_research_run(run_id: int, conn: sqlite3.Connection | None = None) -> dic
         if not row:
             return None
         data = dict(row)
-        data['pending'] = conn.execute('SELECT COUNT(*) AS c FROM research_jobs WHERE run_id=? AND status=?', (run_id, 'pending')).fetchone()['c']
-        data['running'] = conn.execute('SELECT COUNT(*) AS c FROM research_jobs WHERE run_id=? AND status=?', (run_id, 'running')).fetchone()['c']
+        counts = {r['status']: r['count'] for r in conn.execute('SELECT status, COUNT(*) AS count FROM research_jobs WHERE run_id=? GROUP BY status', (run_id,)).fetchall()}
+        data['total'] = sum(counts.values())
+        data['completed'] = counts.get('completed', 0)
+        data['failed'] = counts.get('failed', 0)
+        data['needs_browser'] = counts.get('needs_browser', 0)
+        data['pending'] = counts.get('pending', 0)
+        data['running'] = counts.get('running', 0)
+        if data['status'] != 'cancelled':
+            data['status'] = 'running' if data['running'] else ('pending' if data['pending'] else 'completed')
+            if data['failed'] and not data['pending'] and not data['running']:
+                data['status'] = 'completed_with_failures'
         data['recent_errors'] = [dict(r) for r in conn.execute('''SELECT j.id AS job_id, j.startup_id, s.company, j.status, j.last_error
             FROM research_jobs j JOIN startups s ON s.id=j.startup_id
             WHERE j.run_id=? AND j.last_error IS NOT NULL

@@ -1,7 +1,11 @@
+from scrapy.http import HtmlResponse
+
+from startup_search.crawler.spiders.startup_research_spider import StartupResearchSpider
 from startup_search.config import get_settings
 from startup_search.models import StartupInput
 from startup_search.storage import (
     apply_research,
+    connect,
     create_research_run,
     get_research_run,
     import_startups,
@@ -52,3 +56,57 @@ def test_research_job_status_counts_and_fetches(monkeypatch, tmp_path):
     assert refreshed['needs_browser'] == 1
     assert refreshed['pending'] == 0
     assert refreshed['recent_errors'][0]['company'] == 'Thin JS Co'
+
+
+def test_research_run_counts_are_derived_from_jobs(monkeypatch, tmp_path):
+    configure_temp_db(monkeypatch, tmp_path)
+    import_startups([StartupInput(company='Stale Summary Co', website='https://example.com')])
+    run = create_research_run(limit=1)
+    job = list_research_jobs(run['id'])[0]
+
+    with connect() as conn:
+        conn.execute('UPDATE research_jobs SET status=? WHERE id=?', ('completed', job['id']))
+        conn.execute('UPDATE research_runs SET status=?, completed=? WHERE id=?', ('running', 0, run['id']))
+
+    refreshed = get_research_run(run['id'])
+    assert refreshed['completed'] == 1
+    assert refreshed['running'] == 0
+    assert refreshed['status'] == 'completed'
+
+
+def test_spider_updates_completed_count_before_close(monkeypatch, tmp_path):
+    configure_temp_db(monkeypatch, tmp_path)
+    import_startups([StartupInput(company='Live Progress AI', website='https://example.com')])
+    run = create_research_run(limit=1)
+    spider = StartupResearchSpider(run_id=run['id'], limit=1)
+
+    requests = list(spider.start_requests())
+    assert get_research_run(run['id'])['running'] == 1
+
+    body = ('''<html><body><p>We build AI agents and machine learning tools for developer workflows.
+        We are hiring interns and engineers for remote product engineering roles.</p></body></html>''' * 8).encode()
+    response = HtmlResponse(
+        url=requests[0].url,
+        status=200,
+        headers={'Content-Type': 'text/html'},
+        body=body,
+        request=requests[0],
+        encoding='utf-8',
+    )
+    list(spider.parse_page(response))
+    assert get_research_run(run['id'])['completed'] == 0
+
+    for request in requests[1:]:
+        response = HtmlResponse(
+            url=request.url,
+            status=404,
+            headers={'Content-Type': 'text/html'},
+            body=b'not found',
+            request=request,
+            encoding='utf-8',
+        )
+        list(spider.parse_page(response))
+
+    refreshed = get_research_run(run['id'])
+    assert refreshed['completed'] == 1
+    assert refreshed['running'] == 0

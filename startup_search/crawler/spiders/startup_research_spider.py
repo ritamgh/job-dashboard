@@ -33,6 +33,8 @@ class StartupResearchSpider(scrapy.Spider):
         self.startups: dict[int, StartupInput] = {}
         self.job_startup_ids: dict[int, int] = {}
         self.seen_urls: dict[int, set[str]] = defaultdict(set)
+        self.inflight_requests: dict[int, int] = defaultdict(int)
+        self.finalized_jobs: set[int] = set()
         self.max_pages_per_job = 8
 
     def start_requests(self):
@@ -53,9 +55,14 @@ class StartupResearchSpider(scrapy.Spider):
             home = normalize_url(startup.website)
             if not home:
                 self.errors[job_id].append('No website URL to crawl')
+                self.finalize_job(job_id)
                 continue
+            requests = []
             for url in self.initial_urls(home):
-                yield self.make_request(job_id, startup_id, url, source='seed')
+                req = self.make_request(job_id, startup_id, url, source='seed')
+                if req is not None:
+                    requests.append(req)
+            yield from requests
 
     async def start(self):
         for request in self.start_requests():
@@ -76,6 +83,7 @@ class StartupResearchSpider(scrapy.Spider):
         if len(self.seen_urls[job_id]) >= self.max_pages_per_job:
             return None
         self.seen_urls[job_id].add(normalized)
+        self.inflight_requests[job_id] += 1
         return scrapy.Request(
             normalized,
             callback=self.parse_page,
@@ -108,11 +116,15 @@ class StartupResearchSpider(scrapy.Spider):
             content_type=content_type,
             text_chars=len(text),
         )
+        new_requests = []
         if response.status < 400 and text and len(self.seen_urls[job_id]) < self.max_pages_per_job:
             for href in self.discover_career_links(response):
                 req = self.make_request(job_id, startup_id, href, source='discovered')
                 if req is not None:
-                    yield req
+                    new_requests.append(req)
+        self.inflight_requests[job_id] -= 1
+        self.finalize_job_if_done(job_id)
+        yield from new_requests
 
     def discover_career_links(self, response: scrapy.http.Response) -> list[str]:
         home_host = urlparse(response.url).netloc.lower().removeprefix('www.')
@@ -136,32 +148,43 @@ class StartupResearchSpider(scrapy.Spider):
         error = failure.getErrorMessage()[:300]
         self.errors[job_id].append(f'{request.url}: {error}')
         record_research_fetch(job_id, request.url, error=error)
+        self.inflight_requests[job_id] -= 1
+        self.finalize_job_if_done(job_id)
+
+    def finalize_job_if_done(self, job_id: int):
+        if self.inflight_requests[job_id] <= 0:
+            self.finalize_job(job_id)
+
+    def finalize_job(self, job_id: int):
+        if job_id in self.finalized_jobs:
+            return
+        self.finalized_jobs.add(job_id)
+        startup_id = self.job_startup_ids.get(job_id)
+        startup = self.startups.get(job_id)
+        if not startup or startup_id is None:
+            update_research_job(job_id, 'failed', 'Job was not initialized')
+            return
+        pages = self.pages.get(job_id, [])
+        combined_text = '\n'.join(page['text'] for page in pages)
+        evidence_urls = [page['url'] for page in pages]
+        result = None
+        if combined_text:
+            result = deterministic_research(startup, combined_text, evidence_urls)
+            apply_research(startup_id, result)
+        if not normalize_url(startup.website):
+            update_research_job(job_id, 'failed', 'No website URL to crawl')
+            return
+        needs_browser = self.needs_browser(combined_text) and (result is None or result.research_confidence < 8)
+        if needs_browser:
+            update_research_job(job_id, 'needs_browser', self.browser_reason(combined_text), needs_browser=True)
+        elif combined_text:
+            update_research_job(job_id, 'completed')
+        else:
+            update_research_job(job_id, 'failed', '; '.join(self.errors.get(job_id, ['No crawlable text found']))[:500])
 
     def closed(self, reason: str):
         for job in self.jobs:
-            job_id = int(job['id'])
-            startup_id = int(job['startup_id'])
-            startup = self.startups.get(job_id)
-            if not startup:
-                update_research_job(job_id, 'failed', 'Job was not initialized')
-                continue
-            pages = self.pages.get(job_id, [])
-            combined_text = '\n'.join(page['text'] for page in pages)
-            evidence_urls = [page['url'] for page in pages]
-            result = None
-            if combined_text:
-                result = deterministic_research(startup, combined_text, evidence_urls)
-                apply_research(startup_id, result)
-            if not normalize_url(startup.website):
-                update_research_job(job_id, 'failed', 'No website URL to crawl')
-                continue
-            needs_browser = self.needs_browser(combined_text) and (result is None or result.research_confidence < 8)
-            if needs_browser:
-                update_research_job(job_id, 'needs_browser', self.browser_reason(combined_text), needs_browser=True)
-            elif combined_text:
-                update_research_job(job_id, 'completed')
-            else:
-                update_research_job(job_id, 'failed', '; '.join(self.errors.get(job_id, ['No crawlable text found']))[:500])
+            self.finalize_job(int(job['id']))
 
     def needs_browser(self, text: str) -> bool:
         stripped = text.strip()
