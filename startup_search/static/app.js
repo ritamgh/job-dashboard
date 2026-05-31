@@ -11,6 +11,18 @@ let sortDir = -1;
 function toast(message){ toastEl.textContent = message; toastEl.classList.add('show'); setTimeout(()=>toastEl.classList.remove('show'), 3500); }
 function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function hiringClass(s){ return String(s || '').toLowerCase(); }
+function bestHiringUrl(s){
+  const urls = s.evidence_urls || [];
+  return urls.find(u => /careers|jobs|join-us|join/i.test(u)) || (s.hiring_status === 'Yes' ? urls[0] : '');
+}
+function hiringEvidenceHtml(s){
+  const url = bestHiringUrl(s);
+  return `
+    <span class="pill ${hiringClass(s.hiring_status)}">${esc(s.hiring_status)}</span>
+    <br><small>${esc(s.hiring_evidence || '')}</small>
+    ${url ? `<br><a class="evidence-link" href="${esc(url)}" target="_blank" rel="noreferrer">hiring evidence ↗</a>` : ''}
+  `;
+}
 
 async function load(){
   const q = queryEl.value.trim();
@@ -60,9 +72,9 @@ function render(){
     <tr>
       <td class="company"><strong>${esc(s.company)}</strong><br>${s.website ? `<a href="${esc(s.website)}" target="_blank" rel="noreferrer">website</a>` : ''} ${s.linkedin ? `<a href="${esc(s.linkedin)}" target="_blank" rel="noreferrer">linkedin</a>` : ''}</td>
       <td><span class="score">${esc(s.overall_score)}</span></td>
-      <td>${esc(s.ai_native_score)}/10</td>
+      <td>${esc(s.ai_native_score)}/10<br><small>${(s.tags || []).includes('Website-confirmed AI-native') ? 'website confirmed' : (Number(s.ai_native_score || 0) > 0 ? 'needs website confirmation' : 'no signal yet')}</small></td>
       <td>${esc(s.resume_fit_score)}/10</td>
-      <td><span class="pill ${hiringClass(s.hiring_status)}">${esc(s.hiring_status)}</span><br><small>${esc(s.hiring_evidence || '')}</small></td>
+      <td>${hiringEvidenceHtml(s)}</td>
       <td>${esc(s.research_confidence)}/10</td>
       <td class="summary">${esc(s.product_summary || 'Not researched yet.')}<div>${(s.tags || []).map(t => `<span class="pill">${esc(t)}</span>`).join('')}</div>${(s.evidence_urls || []).slice(0,3).map(u => `<div><a href="${esc(u)}" target="_blank" rel="noreferrer">${esc(u)}</a></div>`).join('')}</td>
       <td>

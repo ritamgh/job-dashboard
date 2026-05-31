@@ -23,6 +23,17 @@ Open <http://127.0.0.1:8000>.
   - 10% remote/India feasibility
 - Provides filters, sortable score columns, evidence notes, CSV export, and on-demand LinkedIn messages.
 
+## AI score and website confirmation
+
+The AI score is intentionally conservative:
+
+- On import, the sheet/category/social metadata is used only for triage. Sheet-only AI matches are capped at **5/10** and tagged as **AI signal unconfirmed**.
+- When you click **Research** or **Research next 100**, the app fetches the company homepage plus common careers URLs (`/careers`, `/jobs`, `/join-us`, `/company/careers`).
+- A company only gets the **Website-confirmed AI-native** tag and can rise to **6-10/10** when its own fetched website text contains AI product language such as AI agents, LLMs, generative AI, computer vision, RAG, inference, vector search, or machine learning.
+- If the sheet says AI but the website scrape does not confirm it, the score stays capped and the summary says that website confirmation is missing.
+
+Hiring evidence works the same way: a `Yes` hiring label is shown with the matched evidence text and a careers/jobs/homepage link directly below it in the dashboard.
+
 ## Optional OpenAI key
 
 The app works without an API key using local fallback messages. For higher-quality on-demand messages:

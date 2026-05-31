@@ -39,3 +39,5 @@ The provided sheet has already been imported locally once. A CSV snapshot exists
 - The source sheet returned 401 from the CSV export endpoint, but the Google Visualization endpoint works with `headers=0` and returns 1,562 startup rows after skipping founder-continuation rows. `startup_search/sheet_scraper.py` uses this first, then falls back to rendered Playwright extraction.
 - Browser bridge setup currently needs manual Firefox extension approval, so app-level Playwright is the reliable scraping path.
 - The parent `/home/atom` git repo has unrelated dirty dotfiles. This project is isolated with its own `.git` under `/home/atom/Developer/job-mcp`.
+- AI scoring is source-aware: sheet/category signals are triage only, capped at 5/10 and tagged `AI signal unconfirmed`; website/careers fetched text can produce `Website-confirmed AI-native` and 6-10/10.
+- Hiring `Yes` should only come from fetched website/careers evidence. Sheet-only rows are `Maybe` with `Hiring unverified`; the UI shows hiring evidence text plus the best careers/jobs/homepage evidence link below the label.
