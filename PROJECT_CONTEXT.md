@@ -26,6 +26,7 @@ The provided sheet has already been imported locally once. A CSV snapshot exists
 
 ## Important paths
 - `plan/startup-search-plan.md`: discovery and execution plan.
+- `plan/scrapy-first-playwright-later-plan.md`: office-hours design plan for durable Scrapy-first batch research with later Playwright fallback.
 - `resume/master_resume 2.pdf`: source resume used for targeting.
 - `startup_search/app.py`: FastAPI routes.
 - `startup_search/storage.py`: SQLite schema and persistence helpers.
