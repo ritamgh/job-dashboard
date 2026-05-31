@@ -11,7 +11,8 @@ Local research dashboard for ranking 1.5k+ recently funded startups for Ritam Gh
 
 ## Architecture
 - Backend: FastAPI app in `startup_search/`.
-- Storage: local SQLite database under `data/startup_search.db` by default, plus optional fetch cache.
+- Batch crawler: durable SQLite research queue plus Scrapy worker under `startup_search/crawler/`; Playwright remains a future fallback for `needs_browser` rows.
+- Storage: local SQLite database under `data/startup_search.db` by default, plus optional fetch cache. SQLite uses WAL + busy timeout so the UI and crawler can read/write concurrently.
 - Frontend: static HTML/CSS/JS served from `startup_search/static/`.
 - Tests: `tests/` run with pytest in the `startup-search` conda environment.
 
@@ -32,6 +33,7 @@ The provided sheet has already been imported locally once. A CSV snapshot exists
 - `startup_search/storage.py`: SQLite schema and persistence helpers.
 - `startup_search/scoring.py`: deterministic scoring and labels.
 - `startup_search/research.py`: crawler/research pipeline.
+- `startup_search/crawler/`: Scrapy-first batch research worker, settings, and startup spider.
 - `startup_search/llm.py`: OpenAI abstraction and dry-run message generation.
 - `startup_search/sheet_scraper.py`: Google Sheet extraction helpers.
 - `data/startup-search-export.csv`: latest enriched/exportable CSV snapshot generated from the sheet.
@@ -42,3 +44,4 @@ The provided sheet has already been imported locally once. A CSV snapshot exists
 - The parent `/home/atom` git repo has unrelated dirty dotfiles. This project is isolated with its own `.git` under `/home/atom/Developer/job-mcp`.
 - AI scoring is source-aware: sheet/category signals are triage only, capped at 5/10 and tagged `AI signal unconfirmed`; website/careers fetched text can produce `Website-confirmed AI-native` and 6-10/10.
 - Hiring `Yes` should only come from fetched website/careers evidence. Sheet-only rows are `Maybe` with `Hiring unverified`; the UI shows hiring evidence text plus the best careers/jobs/homepage evidence link below the label.
+- Batch research queue state lives in `research_runs`, `research_jobs`, and `research_fetches`. The dashboard can enqueue `Research next 100`/`Research all unverified`; the spawned worker logs to `data/crawler_logs/research-run-<id>.log`.

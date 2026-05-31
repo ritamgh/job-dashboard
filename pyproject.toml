@@ -12,6 +12,7 @@ dependencies = [
   "python-dotenv",
   "openai",
   "playwright",
+  "scrapy",
   "pandas",
   "python-multipart",
 ]

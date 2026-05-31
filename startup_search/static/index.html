@@ -45,6 +45,18 @@
       </label>
     </section>
 
+    <section class="panel queue" aria-label="Research queue">
+      <div>
+        <h2>Research queue</h2>
+        <p class="subtle">Scrapy verifies homepage/careers evidence first. JS-heavy or thin pages are marked for later browser fallback.</p>
+      </div>
+      <div id="queueStatus" class="queue-status">No research run yet.</div>
+      <div class="actions">
+        <button id="researchAll" class="button secondary">Research all unverified</button>
+        <button id="cancelRun" class="button secondary">Cancel pending</button>
+      </div>
+    </section>
+
     <section class="stats" id="stats" aria-live="polite"></section>
     <section class="table-wrap panel">
       <table>

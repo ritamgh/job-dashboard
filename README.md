@@ -34,6 +34,17 @@ The AI score is intentionally conservative:
 
 Hiring evidence works the same way: a `Yes` hiring label is shown with the matched evidence text and a careers/jobs/homepage link directly below it in the dashboard.
 
+## Scrapy research queue
+
+Batch research now uses a durable SQLite queue plus a Scrapy worker. The dashboard can enqueue **Research next 100** or **Research all unverified**, then poll progress for completed, failed, pending, running, and `needs_browser` counts. Scrapy handles the fast/static path first: homepage, common careers paths, discovered careers links, and linked ATS pages. Thin JavaScript shells are separated as `needs_browser` for a later Playwright fallback instead of blocking the whole run.
+
+Manual worker run:
+
+```bash
+conda activate startup-search
+python -m startup_search.crawler.runner --run-id <RUN_ID> --limit 100
+```
+
 ## Optional OpenAI key
 
 The app works without an API key using local fallback messages. For higher-quality on-demand messages:

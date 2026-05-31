@@ -38,6 +38,44 @@ CREATE TABLE IF NOT EXISTS startups (
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_startups_company_website ON startups(company, COALESCE(website, ''));
+
+CREATE TABLE IF NOT EXISTS research_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  total INTEGER NOT NULL DEFAULT 0,
+  completed INTEGER NOT NULL DEFAULT 0,
+  failed INTEGER NOT NULL DEFAULT 0,
+  needs_browser INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS research_jobs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id INTEGER NOT NULL,
+  startup_id INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT,
+  needs_browser INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(run_id, startup_id)
+);
+CREATE INDEX IF NOT EXISTS idx_research_jobs_run_status ON research_jobs(run_id, status, id);
+
+CREATE TABLE IF NOT EXISTS research_fetches (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  job_id INTEGER NOT NULL,
+  url TEXT NOT NULL,
+  final_url TEXT,
+  status_code INTEGER,
+  content_type TEXT,
+  text_chars INTEGER NOT NULL DEFAULT 0,
+  error TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_research_fetches_job ON research_fetches(job_id);
 '''
 
 @contextmanager
@@ -46,6 +84,8 @@ def connect():
     settings.database_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(settings.database_path)
     conn.row_factory = sqlite3.Row
+    conn.execute('PRAGMA journal_mode=WAL')
+    conn.execute('PRAGMA busy_timeout=5000')
     try:
         conn.executescript(SCHEMA)
         yield conn
@@ -128,3 +168,104 @@ def export_csv(path: Path) -> Path:
             d['evidence_urls'] = '; '.join(r.evidence_urls)
             writer.writerow({field: d.get(field) for field in fields})
     return path
+
+
+def _refresh_run_counts(conn: sqlite3.Connection, run_id: int) -> None:
+    counts = {row['status']: row['count'] for row in conn.execute('SELECT status, COUNT(*) AS count FROM research_jobs WHERE run_id=? GROUP BY status', (run_id,)).fetchall()}
+    total = sum(counts.values())
+    completed = counts.get('completed', 0)
+    failed = counts.get('failed', 0)
+    needs_browser = counts.get('needs_browser', 0)
+    running = counts.get('running', 0)
+    pending = counts.get('pending', 0)
+    status = 'running' if running else ('pending' if pending else 'completed')
+    if failed and not pending and not running:
+        status = 'completed_with_failures'
+    conn.execute('''UPDATE research_runs SET status=?, total=?, completed=?, failed=?, needs_browser=?, updated_at=CURRENT_TIMESTAMP WHERE id=?''',
+                 (status, total, completed, failed, needs_browser, run_id))
+
+
+def create_research_run(limit: int = 100, only_unresearched: bool = True, max_confidence: int = 6) -> dict:
+    with connect() as conn:
+        cur = conn.execute('INSERT INTO research_runs(status) VALUES(?)', ('pending',))
+        run_id = int(cur.lastrowid)
+        sql = 'SELECT id FROM startups'
+        params: list[object] = []
+        if only_unresearched:
+            sql += ' WHERE research_confidence <= ?'
+            params.append(max_confidence)
+        sql += ' ORDER BY overall_score DESC, id ASC LIMIT ?'
+        params.append(limit)
+        startup_ids = [int(row['id']) for row in conn.execute(sql, params).fetchall()]
+        for startup_id in startup_ids:
+            conn.execute('INSERT OR IGNORE INTO research_jobs(run_id, startup_id) VALUES(?, ?)', (run_id, startup_id))
+        _refresh_run_counts(conn, run_id)
+        return get_research_run(run_id, conn=conn) or {'id': run_id, 'total': 0}
+
+
+def get_research_run(run_id: int, conn: sqlite3.Connection | None = None) -> dict | None:
+    owns_conn = conn is None
+    if owns_conn:
+        ctx = connect()
+        conn = ctx.__enter__()
+    try:
+        row = conn.execute('SELECT * FROM research_runs WHERE id=?', (run_id,)).fetchone()
+        if not row:
+            return None
+        data = dict(row)
+        data['pending'] = conn.execute('SELECT COUNT(*) AS c FROM research_jobs WHERE run_id=? AND status=?', (run_id, 'pending')).fetchone()['c']
+        data['running'] = conn.execute('SELECT COUNT(*) AS c FROM research_jobs WHERE run_id=? AND status=?', (run_id, 'running')).fetchone()['c']
+        data['recent_errors'] = [dict(r) for r in conn.execute('''SELECT j.id AS job_id, j.startup_id, s.company, j.status, j.last_error
+            FROM research_jobs j JOIN startups s ON s.id=j.startup_id
+            WHERE j.run_id=? AND j.last_error IS NOT NULL
+            ORDER BY j.updated_at DESC LIMIT 8''', (run_id,)).fetchall()]
+        return data
+    finally:
+        if owns_conn:
+            ctx.__exit__(None, None, None)
+
+
+def latest_research_run() -> dict | None:
+    with connect() as conn:
+        row = conn.execute('SELECT id FROM research_runs ORDER BY id DESC LIMIT 1').fetchone()
+        return get_research_run(int(row['id']), conn=conn) if row else None
+
+
+def list_research_jobs(run_id: int, status: str = 'pending', limit: int = 100) -> list[dict]:
+    with connect() as conn:
+        rows = conn.execute('''SELECT j.*, s.company, s.website, s.linkedin, s.twitter, s.funding, s.raw_json
+            FROM research_jobs j JOIN startups s ON s.id=j.startup_id
+            WHERE j.run_id=? AND j.status=?
+            ORDER BY j.id ASC LIMIT ?''', (run_id, status, limit)).fetchall()
+        jobs = []
+        for row in rows:
+            data = dict(row)
+            data['raw'] = json.loads(data.pop('raw_json') or '{}')
+            jobs.append(data)
+        return jobs
+
+
+def update_research_job(job_id: int, status: str, last_error: str | None = None, needs_browser: bool = False) -> None:
+    with connect() as conn:
+        row = conn.execute('SELECT run_id, attempts FROM research_jobs WHERE id=?', (job_id,)).fetchone()
+        if not row:
+            return
+        attempts = int(row['attempts']) + (1 if status == 'running' else 0)
+        conn.execute('''UPDATE research_jobs SET status=?, attempts=?, last_error=?, needs_browser=?, updated_at=CURRENT_TIMESTAMP WHERE id=?''',
+                     (status, attempts, last_error, 1 if needs_browser else 0, job_id))
+        _refresh_run_counts(conn, int(row['run_id']))
+
+
+def record_research_fetch(job_id: int, url: str, final_url: str | None = None, status_code: int | None = None, content_type: str | None = None, text_chars: int = 0, error: str | None = None) -> None:
+    with connect() as conn:
+        conn.execute('''INSERT INTO research_fetches(job_id, url, final_url, status_code, content_type, text_chars, error) VALUES(?, ?, ?, ?, ?, ?, ?)''',
+                     (job_id, url, final_url, status_code, content_type, text_chars, error))
+
+
+def cancel_research_run(run_id: int) -> dict | None:
+    with connect() as conn:
+        conn.execute('''UPDATE research_jobs SET status='skipped', updated_at=CURRENT_TIMESTAMP WHERE run_id=? AND status IN ('pending', 'running')''', (run_id,))
+        conn.execute('UPDATE research_runs SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?', ('cancelled', run_id))
+        _refresh_run_counts(conn, run_id)
+        conn.execute('UPDATE research_runs SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?', ('cancelled', run_id))
+        return get_research_run(run_id, conn=conn)

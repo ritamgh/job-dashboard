@@ -4,9 +4,11 @@ const toastEl = document.querySelector('#toast');
 const queryEl = document.querySelector('#query');
 const hiringFilterEl = document.querySelector('#hiringFilter');
 const minAiEl = document.querySelector('#minAi');
+const queueStatusEl = document.querySelector('#queueStatus');
 let startups = [];
 let sortKey = 'overall_score';
 let sortDir = -1;
+let latestRunId = null;
 
 function toast(message){ toastEl.textContent = message; toastEl.classList.add('show'); setTimeout(()=>toastEl.classList.remove('show'), 3500); }
 function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -29,6 +31,28 @@ async function load(){
   const res = await fetch(`/api/startups?limit=5000${q ? `&q=${encodeURIComponent(q)}` : ''}`);
   startups = await res.json();
   render();
+  await loadQueueStatus();
+}
+
+function renderQueue(run){
+  if (!run || !run.id) {
+    queueStatusEl.textContent = 'No research run yet.';
+    return;
+  }
+  latestRunId = run.id;
+  const done = Number(run.completed || 0) + Number(run.failed || 0) + Number(run.needs_browser || 0);
+  const total = Number(run.total || 0);
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  queueStatusEl.innerHTML = `
+    <strong>Run #${esc(run.id)}</strong> · ${esc(run.status)} · ${done}/${total} (${pct}%)
+    <br><small>${esc(run.pending || 0)} pending · ${esc(run.running || 0)} running · ${esc(run.completed || 0)} completed · ${esc(run.failed || 0)} failed · ${esc(run.needs_browser || 0)} need browser fallback</small>
+  `;
+}
+
+async function loadQueueStatus(){
+  const res = await fetch('/api/research-runs/latest');
+  if (!res.ok) return;
+  renderQueue(await res.json());
 }
 
 function renderStats(){
@@ -128,16 +152,38 @@ async function importCsv(file){
 }
 
 async function researchBatch(){
-  await fetch('/api/research', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({limit:100, only_unresearched:true, max_confidence:6})});
-  toast('Queued research for next 100. Refresh in a bit.');
+  const res = await fetch('/api/research-runs', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({limit:100, only_unresearched:true, max_confidence:6, start_worker:true})});
+  const data = await res.json();
+  renderQueue(data.run);
+  toast(`Queued Scrapy research run #${data.run.id} for ${data.run.total} companies.`);
+}
+
+async function researchAll(){
+  const button = event?.target;
+  if (button) button.disabled = true;
+  const res = await fetch('/api/research-runs', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({limit:5000, only_unresearched:true, max_confidence:6, start_worker:true})});
+  const data = await res.json();
+  renderQueue(data.run);
+  toast(`Queued Scrapy research run #${data.run.id} for ${data.run.total} companies.`);
+  if (button) button.disabled = false;
+}
+
+async function cancelRun(){
+  if (!latestRunId) return toast('No run to cancel.');
+  const res = await fetch(`/api/research-runs/${latestRunId}/cancel`, {method:'POST'});
+  if (res.ok) renderQueue(await res.json());
+  toast('Marked pending/running jobs as skipped.');
 }
 
 document.querySelector('#refresh').addEventListener('click', load);
 document.querySelector('#importSheet').addEventListener('click', importSheet);
 document.querySelector('#research').addEventListener('click', researchBatch);
+document.querySelector('#researchAll').addEventListener('click', researchAll);
+document.querySelector('#cancelRun').addEventListener('click', cancelRun);
 document.querySelector('#csvFile').addEventListener('change', e => e.target.files[0] && importCsv(e.target.files[0]));
 queryEl.addEventListener('input', () => { clearTimeout(window.__q); window.__q = setTimeout(load, 250); });
 hiringFilterEl.addEventListener('change', render);
 minAiEl.addEventListener('input', render);
 window.sortBy = sortBy;
 load();
+setInterval(loadQueueStatus, 5000);

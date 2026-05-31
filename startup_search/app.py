@@ -1,6 +1,9 @@
 from __future__ import annotations
+import os
 from pathlib import Path
-from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile
+import subprocess
+import sys
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -9,7 +12,7 @@ from .llm import generate_message
 from .models import MessageRequest, StartupInput
 from .research import research_startup
 from .sheet_scraper import scrape_google_sheet
-from .storage import apply_research, export_csv, get_startup, import_startups, list_startups, save_message
+from .storage import apply_research, cancel_research_run, create_research_run, export_csv, get_research_run, get_startup, import_startups, latest_research_run, list_startups, save_message
 
 app = FastAPI(title='Startup Search Dashboard')
 STATIC_DIR = Path(__file__).parent / 'static'
@@ -26,6 +29,7 @@ class ResearchPayload(BaseModel):
     limit: int = 100
     only_unresearched: bool = True
     max_confidence: int = 6
+    start_worker: bool = True
 
 @app.get('/', response_class=HTMLResponse)
 def index() -> str:
@@ -52,18 +56,58 @@ async def import_google_sheet(payload: SheetPayload):
     ids = import_startups(startups_from_rows(rows))
     return {'scraped_rows': len(rows), 'imported': len(ids), 'ids': ids[:20]}
 
-async def research_batch(limit: int, only_unresearched: bool, max_confidence: int) -> None:
-    records = list_startups(limit=5000)
-    if only_unresearched:
-        records = [r for r in records if r.research_confidence <= max_confidence]
-    for record in records[:limit]:
-        result = await research_startup(StartupInput(**record.model_dump(include={'company','website','linkedin','twitter','funding','raw'})))
-        apply_research(record.id, result)
+def start_scrapy_worker(run_id: int, limit: int) -> str:
+    log_dir = Path('data/crawler_logs')
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / f'research-run-{run_id}.log'
+    env = os.environ.copy()
+    env['PYTHONPATH'] = f"{Path.cwd()}{os.pathsep}{env.get('PYTHONPATH', '')}"
+    with log_path.open('ab') as log_file:
+        subprocess.Popen(
+            [sys.executable, '-m', 'startup_search.crawler.runner', '--run-id', str(run_id), '--limit', str(limit)],
+            cwd=Path.cwd(),
+            env=env,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+    return str(log_path)
 
 @app.post('/api/research')
-def start_research(payload: ResearchPayload, background_tasks: BackgroundTasks):
-    background_tasks.add_task(research_batch, payload.limit, payload.only_unresearched, payload.max_confidence)
-    return {'status': 'queued', 'limit': payload.limit, 'only_unresearched': payload.only_unresearched, 'max_confidence': payload.max_confidence}
+def start_research(payload: ResearchPayload):
+    run = create_research_run(payload.limit, payload.only_unresearched, payload.max_confidence)
+    log_path = start_scrapy_worker(run['id'], payload.limit) if payload.start_worker and run.get('total', 0) else None
+    run = get_research_run(run['id']) or run
+    return {'status': 'queued', 'run': run, 'log_path': log_path}
+
+
+@app.post('/api/research-runs')
+def create_run(payload: ResearchPayload):
+    run = create_research_run(payload.limit, payload.only_unresearched, payload.max_confidence)
+    log_path = start_scrapy_worker(run['id'], payload.limit) if payload.start_worker and run.get('total', 0) else None
+    run = get_research_run(run['id']) or run
+    return {'run': run, 'log_path': log_path}
+
+
+@app.get('/api/research-runs/latest')
+def latest_run():
+    return latest_research_run() or {}
+
+
+@app.get('/api/research-runs/{run_id}')
+def read_run(run_id: int):
+    run = get_research_run(run_id)
+    if not run:
+        raise HTTPException(404, 'Research run not found')
+    return run
+
+
+@app.post('/api/research-runs/{run_id}/cancel')
+def cancel_run(run_id: int):
+    run = cancel_research_run(run_id)
+    if not run:
+        raise HTTPException(404, 'Research run not found')
+    return run
 
 @app.post('/api/startups/{startup_id}/research')
 async def research_one(startup_id: int):
