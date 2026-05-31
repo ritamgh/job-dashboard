@@ -1,0 +1,131 @@
+const rowsEl = document.querySelector('#rows');
+const statsEl = document.querySelector('#stats');
+const toastEl = document.querySelector('#toast');
+const queryEl = document.querySelector('#query');
+const hiringFilterEl = document.querySelector('#hiringFilter');
+const minAiEl = document.querySelector('#minAi');
+let startups = [];
+let sortKey = 'overall_score';
+let sortDir = -1;
+
+function toast(message){ toastEl.textContent = message; toastEl.classList.add('show'); setTimeout(()=>toastEl.classList.remove('show'), 3500); }
+function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function hiringClass(s){ return String(s || '').toLowerCase(); }
+
+async function load(){
+  const q = queryEl.value.trim();
+  const res = await fetch(`/api/startups?limit=5000${q ? `&q=${encodeURIComponent(q)}` : ''}`);
+  startups = await res.json();
+  render();
+}
+
+function renderStats(){
+  const total = startups.length;
+  const researched = startups.filter(s => s.research_confidence > 0).length;
+  const yes = startups.filter(s => s.hiring_status === 'Yes').length;
+  const aiStrong = startups.filter(s => s.ai_native_score >= 7).length;
+  statsEl.innerHTML = [
+    ['Companies', total], ['Researched', researched], ['Active hiring', yes], ['Strong AI-native', aiStrong]
+  ].map(([label, value]) => `<div class="stat"><strong>${value}</strong><span>${label}</span></div>`).join('');
+}
+
+function visibleStartups(){
+  const hiring = hiringFilterEl.value;
+  const minAi = Number(minAiEl.value || 0);
+  return startups
+    .filter(s => !hiring || s.hiring_status === hiring)
+    .filter(s => Number(s.ai_native_score || 0) >= minAi)
+    .sort((a,b) => {
+      const av = a[sortKey] ?? '';
+      const bv = b[sortKey] ?? '';
+      if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * sortDir;
+      return String(av).localeCompare(String(bv)) * sortDir;
+    });
+}
+
+function sortBy(key){
+  if (sortKey === key) sortDir *= -1;
+  else { sortKey = key; sortDir = key === 'company' ? 1 : -1; }
+  render();
+}
+
+function render(){
+  renderStats();
+  const visible = visibleStartups();
+  if (!visible.length) {
+    rowsEl.innerHTML = '<tr><td colspan="8" class="empty">No companies match the current filters. Try lowering the AI score or clearing search.</td></tr>';
+    return;
+  }
+  rowsEl.innerHTML = visible.map(s => `
+    <tr>
+      <td class="company"><strong>${esc(s.company)}</strong><br>${s.website ? `<a href="${esc(s.website)}" target="_blank" rel="noreferrer">website</a>` : ''} ${s.linkedin ? `<a href="${esc(s.linkedin)}" target="_blank" rel="noreferrer">linkedin</a>` : ''}</td>
+      <td><span class="score">${esc(s.overall_score)}</span></td>
+      <td>${esc(s.ai_native_score)}/10</td>
+      <td>${esc(s.resume_fit_score)}/10</td>
+      <td><span class="pill ${hiringClass(s.hiring_status)}">${esc(s.hiring_status)}</span><br><small>${esc(s.hiring_evidence || '')}</small></td>
+      <td>${esc(s.research_confidence)}/10</td>
+      <td class="summary">${esc(s.product_summary || 'Not researched yet.')}<div>${(s.tags || []).map(t => `<span class="pill">${esc(t)}</span>`).join('')}</div>${(s.evidence_urls || []).slice(0,3).map(u => `<div><a href="${esc(u)}" target="_blank" rel="noreferrer">${esc(u)}</a></div>`).join('')}</td>
+      <td>
+        <button class="button secondary" onclick="researchOne(${s.id})">Research</button>
+        <button class="button secondary" onclick="message(${s.id}, 'short')">Short</button>
+        <button class="button secondary" onclick="message(${s.id}, 'founder')">Founder DM</button>
+        <div id="msg-${s.id}" class="message-box">${esc(s.message_short || s.message_founder || '')}</div>
+      </td>
+    </tr>`).join('');
+}
+
+async function researchOne(id){
+  const button = event?.target;
+  if (button) button.disabled = true;
+  toast('Researching company...');
+  await fetch(`/api/startups/${id}/research`, {method:'POST'});
+  await load();
+  toast('Research complete');
+}
+
+async function message(id, style){
+  const button = event?.target;
+  if (button) button.disabled = true;
+  toast(`Generating ${style} message...`);
+  const res = await fetch(`/api/startups/${id}/message`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({style})});
+  const data = await res.json();
+  document.querySelector(`#msg-${id}`).textContent = data.message;
+  await navigator.clipboard?.writeText(data.message).catch(()=>{});
+  toast(data.cached ? 'Copied cached message' : 'Generated and copied message');
+  await load();
+}
+
+async function importSheet(){
+  document.querySelector('#importSheet').disabled = true;
+  const url = document.querySelector('#sheetUrl').value.trim();
+  toast('Scraping rendered sheet. This can take a while for 1.5k rows...');
+  const res = await fetch('/api/import/google-sheet', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({url, max_scrolls: 160})});
+  const data = await res.json();
+  toast(`Imported ${data.imported} rows`);
+  document.querySelector('#importSheet').disabled = false;
+  await load();
+}
+
+async function importCsv(file){
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch('/api/import/csv', {method:'POST', body: form});
+  const data = await res.json();
+  toast(`Imported ${data.imported} CSV rows`);
+  await load();
+}
+
+async function researchBatch(){
+  await fetch('/api/research', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({limit:100, only_unresearched:true, max_confidence:6})});
+  toast('Queued research for next 100. Refresh in a bit.');
+}
+
+document.querySelector('#refresh').addEventListener('click', load);
+document.querySelector('#importSheet').addEventListener('click', importSheet);
+document.querySelector('#research').addEventListener('click', researchBatch);
+document.querySelector('#csvFile').addEventListener('change', e => e.target.files[0] && importCsv(e.target.files[0]));
+queryEl.addEventListener('input', () => { clearTimeout(window.__q); window.__q = setTimeout(load, 250); });
+hiringFilterEl.addEventListener('change', render);
+minAiEl.addEventListener('input', render);
+window.sortBy = sortBy;
+load();

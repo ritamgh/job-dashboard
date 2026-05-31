@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Startup Search Dashboard</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <header class="hero">
+    <div>
+      <p class="eyebrow">AI internship targeting</p>
+      <h1>Startup Search Dashboard</h1>
+      <p class="subtle">Rank funded startups by AI-native product depth, resume fit, hiring likelihood, learning challenge, and remote/India feasibility.</p>
+    </div>
+    <div class="actions">
+      <a class="button secondary" href="/api/export.csv">Export CSV</a>
+      <button id="refresh" class="button">Refresh</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel controls" aria-label="Import and research controls">
+      <label>Google Sheet URL
+        <input id="sheetUrl" value="https://docs.google.com/spreadsheets/d/1w11kuIGWOVATOad5acQqVWSzELF25xCyP6j3yoBiEUc/edit?gid=0#gid=0" />
+      </label>
+      <button id="importSheet" class="button">Read-only scrape sheet</button>
+      <label>CSV fallback
+        <input id="csvFile" type="file" accept=".csv" />
+      </label>
+      <button id="research" class="button secondary">Research next 100</button>
+      <label>Search/filter
+        <input id="query" placeholder="AI agents, hiring, company..." />
+      </label>
+      <label>Hiring
+        <select id="hiringFilter">
+          <option value="">Any</option>
+          <option>Yes</option>
+          <option>Maybe</option>
+          <option>No</option>
+        </select>
+      </label>
+      <label>Minimum AI score
+        <input id="minAi" type="number" min="0" max="10" value="0" />
+      </label>
+    </section>
+
+    <section class="stats" id="stats" aria-live="polite"></section>
+    <section class="table-wrap panel">
+      <table>
+        <thead>
+          <tr>
+            <th><button class="sort" onclick="sortBy('company')">Company</button></th>
+            <th><button class="sort" onclick="sortBy('overall_score')">Fit</button></th>
+            <th><button class="sort" onclick="sortBy('ai_native_score')">AI</button></th>
+            <th><button class="sort" onclick="sortBy('resume_fit_score')">Resume</button></th>
+            <th><button class="sort" onclick="sortBy('hiring_status')">Hiring</button></th>
+            <th><button class="sort" onclick="sortBy('research_confidence')">Confidence</button></th>
+            <th>Summary & evidence</th><th>Messages</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </section>
+  </main>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+[project]
+name = "startup-search"
+version = "0.1.0"
+description = "Local startup research dashboard for AI internship targeting"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi",
+  "uvicorn[standard]",
+  "httpx",
+  "beautifulsoup4",
+  "pydantic-settings",
+  "python-dotenv",
+  "openai",
+  "playwright",
+  "pandas",
+  "python-multipart",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
