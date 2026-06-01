@@ -9,10 +9,11 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from .importers import startups_from_csv, startups_from_rows
 from .llm import generate_message, is_stale_message
-from .models import MessageRequest, StartupInput
+from .models import MessageRequest, OutreachDraftUpdate, OutreachSendRequest, OutreachSessionCreate, StartupInput
+from .outreach import discover_contacts, generate_drafts, research_session, send_draft
 from .research import research_startup
 from .sheet_scraper import scrape_google_sheet
-from .storage import apply_research, cancel_research_run, create_research_run, export_csv, get_research_run, get_startup, import_startups, latest_research_run, list_startups, save_message
+from .storage import apply_research, cancel_research_run, create_outreach_session, create_research_run, export_csv, get_outreach_session, get_research_run, get_startup, import_startups, latest_research_run, list_outreach_contacts, list_outreach_drafts, list_outreach_sessions, list_startups, save_message, update_outreach_draft
 
 app = FastAPI(title='Startup Search Dashboard')
 STATIC_DIR = Path(__file__).parent / 'static'
@@ -34,6 +35,75 @@ class ResearchPayload(BaseModel):
 @app.get('/', response_class=HTMLResponse)
 def index() -> str:
     return (STATIC_DIR / 'index.html').read_text(encoding='utf-8')
+
+
+@app.get('/outreach', response_class=HTMLResponse)
+def outreach_page() -> str:
+    return (STATIC_DIR / 'outreach.html').read_text(encoding='utf-8')
+
+
+@app.get('/api/outreach/sessions')
+def outreach_sessions(limit: int = 50):
+    return list_outreach_sessions(limit)
+
+
+@app.post('/api/outreach/sessions')
+def create_outreach(payload: OutreachSessionCreate):
+    if not payload.website.strip():
+        raise HTTPException(400, 'Website is required')
+    return create_outreach_session(payload.website.strip(), payload.company.strip() if payload.company else None)
+
+
+@app.get('/api/outreach/sessions/{session_id}')
+def read_outreach(session_id: int):
+    session = get_outreach_session(session_id)
+    if not session:
+        raise HTTPException(404, 'Outreach session not found')
+    session['contacts'] = list_outreach_contacts(session_id)
+    session['drafts'] = list_outreach_drafts(session_id)
+    return session
+
+
+@app.post('/api/outreach/sessions/{session_id}/research')
+async def research_outreach(session_id: int):
+    try:
+        return await research_session(session_id)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
+@app.post('/api/outreach/sessions/{session_id}/contacts')
+async def contacts_outreach(session_id: int):
+    try:
+        return await discover_contacts(session_id)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
+@app.post('/api/outreach/sessions/{session_id}/drafts')
+async def drafts_outreach(session_id: int):
+    try:
+        return await generate_drafts(session_id)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
+@app.patch('/api/outreach/drafts/{draft_id}')
+def edit_outreach_draft(draft_id: int, payload: OutreachDraftUpdate):
+    draft = update_outreach_draft(draft_id, payload.edited_subject, payload.edited_body, payload.contact_id)
+    if not draft:
+        raise HTTPException(404, 'Outreach draft not found')
+    return draft
+
+
+@app.post('/api/outreach/drafts/{draft_id}/send')
+def send_outreach_draft(draft_id: int, payload: OutreachSendRequest):
+    try:
+        return send_draft(draft_id, payload.to, payload.subject, payload.body, payload.confirm_send)
+    except KeyError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 @app.get('/api/startups')
 def api_startups(limit: int = 5000, q: str | None = None):

@@ -62,3 +62,38 @@ class ResearchResult(BaseModel):
 class MessageRequest(BaseModel):
     style: str = Field(pattern='^(short|founder|email)$')
     force: bool = False
+
+
+class OutreachSessionCreate(BaseModel):
+    website: str
+    company: str | None = None
+
+
+class OutreachContactCreate(BaseModel):
+    name: str | None = None
+    role: str | None = None
+    email: str | None = None
+    linkedin_url: str | None = None
+    confidence: int = Field(default=0, ge=0, le=100)
+    source_url: str | None = None
+    source_snippet: str | None = None
+
+
+class OutreachDraftCreate(BaseModel):
+    contact_id: int | None = None
+    channel: str = Field(pattern='^(email|linkedin|followup)$')
+    subject: str | None = None
+    body: str
+
+
+class OutreachDraftUpdate(BaseModel):
+    edited_subject: str | None = None
+    edited_body: str | None = None
+    contact_id: int | None = None
+
+
+class OutreachSendRequest(BaseModel):
+    to: str
+    subject: str | None = None
+    body: str | None = None
+    confirm_send: bool = False

@@ -79,6 +79,51 @@ CREATE TABLE IF NOT EXISTS research_fetches (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_research_fetches_job ON research_fetches(job_id);
+
+CREATE TABLE IF NOT EXISTS outreach_sessions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  company TEXT,
+  website TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'draft',
+  research_json TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_outreach_sessions_updated ON outreach_sessions(updated_at DESC, id DESC);
+
+CREATE TABLE IF NOT EXISTS outreach_contacts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id INTEGER NOT NULL,
+  name TEXT,
+  role TEXT,
+  email TEXT,
+  linkedin_url TEXT,
+  confidence INTEGER NOT NULL DEFAULT 0,
+  source_url TEXT,
+  source_snippet TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_outreach_contacts_unique ON outreach_contacts(session_id, COALESCE(email, ''), COALESCE(linkedin_url, ''));
+CREATE INDEX IF NOT EXISTS idx_outreach_contacts_session ON outreach_contacts(session_id, confidence DESC);
+
+CREATE TABLE IF NOT EXISTS outreach_drafts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id INTEGER NOT NULL,
+  contact_id INTEGER,
+  channel TEXT NOT NULL,
+  subject TEXT,
+  body TEXT NOT NULL,
+  edited_subject TEXT,
+  edited_body TEXT,
+  send_status TEXT NOT NULL DEFAULT 'draft',
+  sent_at TEXT,
+  gmail_message_id TEXT,
+  gmail_thread_id TEXT,
+  last_error TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_outreach_drafts_session ON outreach_drafts(session_id, id);
 '''
 
 
@@ -318,3 +363,96 @@ def cancel_research_run(run_id: int) -> dict | None:
         _refresh_run_counts(conn, run_id)
         conn.execute('UPDATE research_runs SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?', ('cancelled', run_id))
         return get_research_run(run_id, conn=conn)
+
+
+def _json_or_none(value: str | None) -> dict | None:
+    return json.loads(value) if value else None
+
+
+def _session_from_row(row: sqlite3.Row) -> dict:
+    data = dict(row)
+    data['research'] = _json_or_none(data.pop('research_json'))
+    return data
+
+
+def create_outreach_session(website: str, company: str | None = None) -> dict:
+    with connect() as conn:
+        cur = conn.execute('INSERT INTO outreach_sessions(company, website) VALUES(?, ?)', (company, website))
+        row = conn.execute('SELECT * FROM outreach_sessions WHERE id=?', (int(cur.lastrowid),)).fetchone()
+        return _session_from_row(row)
+
+
+def get_outreach_session(session_id: int) -> dict | None:
+    with connect() as conn:
+        row = conn.execute('SELECT * FROM outreach_sessions WHERE id=?', (session_id,)).fetchone()
+        return _session_from_row(row) if row else None
+
+
+def list_outreach_sessions(limit: int = 50) -> list[dict]:
+    with connect() as conn:
+        rows = conn.execute('SELECT * FROM outreach_sessions ORDER BY updated_at DESC, id DESC LIMIT ?', (limit,)).fetchall()
+        return [_session_from_row(row) for row in rows]
+
+
+def save_outreach_research(session_id: int, result: ResearchResult) -> dict:
+    payload = result.model_dump(mode='json')
+    with connect() as conn:
+        conn.execute("UPDATE outreach_sessions SET status='researched', research_json=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (json.dumps(payload), session_id))
+        row = conn.execute('SELECT * FROM outreach_sessions WHERE id=?', (session_id,)).fetchone()
+        return _session_from_row(row)
+
+
+def add_outreach_contact(session_id: int, contact: dict) -> dict:
+    with connect() as conn:
+        conn.execute('''INSERT OR IGNORE INTO outreach_contacts(session_id, name, role, email, linkedin_url, confidence, source_url, source_snippet) VALUES(?, ?, ?, ?, ?, ?, ?, ?)''',
+                     (session_id, contact.get('name'), contact.get('role'), contact.get('email'), contact.get('linkedin_url'), int(contact.get('confidence') or 0), contact.get('source_url'), contact.get('source_snippet')))
+        row = conn.execute('''SELECT * FROM outreach_contacts WHERE session_id=? AND COALESCE(email, '')=COALESCE(?, '') AND COALESCE(linkedin_url, '')=COALESCE(?, '') ORDER BY confidence DESC LIMIT 1''',
+                           (session_id, contact.get('email'), contact.get('linkedin_url'))).fetchone()
+        return dict(row) if row else {}
+
+
+def list_outreach_contacts(session_id: int) -> list[dict]:
+    with connect() as conn:
+        rows = conn.execute('SELECT * FROM outreach_contacts WHERE session_id=? ORDER BY confidence DESC, id ASC', (session_id,)).fetchall()
+        return [dict(row) for row in rows]
+
+
+def create_outreach_draft(session_id: int, draft: dict) -> dict:
+    with connect() as conn:
+        cur = conn.execute('''INSERT INTO outreach_drafts(session_id, contact_id, channel, subject, body) VALUES(?, ?, ?, ?, ?)''',
+                           (session_id, draft.get('contact_id'), draft['channel'], draft.get('subject'), draft['body']))
+        conn.execute('UPDATE outreach_sessions SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?', ('generated', session_id))
+        row = conn.execute('SELECT * FROM outreach_drafts WHERE id=?', (int(cur.lastrowid),)).fetchone()
+        return dict(row)
+
+
+def get_outreach_draft(draft_id: int) -> dict | None:
+    with connect() as conn:
+        row = conn.execute('SELECT * FROM outreach_drafts WHERE id=?', (draft_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def list_outreach_drafts(session_id: int) -> list[dict]:
+    with connect() as conn:
+        rows = conn.execute('SELECT * FROM outreach_drafts WHERE session_id=? ORDER BY id ASC', (session_id,)).fetchall()
+        return [dict(row) for row in rows]
+
+
+def update_outreach_draft(draft_id: int, edited_subject: str | None = None, edited_body: str | None = None, contact_id: int | None = None) -> dict | None:
+    with connect() as conn:
+        current = conn.execute('SELECT * FROM outreach_drafts WHERE id=?', (draft_id,)).fetchone()
+        if not current:
+            return None
+        conn.execute('''UPDATE outreach_drafts SET edited_subject=?, edited_body=?, contact_id=?, updated_at=CURRENT_TIMESTAMP WHERE id=?''',
+                     (edited_subject, edited_body, contact_id, draft_id))
+        row = conn.execute('SELECT * FROM outreach_drafts WHERE id=?', (draft_id,)).fetchone()
+        return dict(row)
+
+
+def set_outreach_draft_send_result(draft_id: int, status: str, gmail_message_id: str | None = None, gmail_thread_id: str | None = None, last_error: str | None = None) -> None:
+    with connect() as conn:
+        conn.execute('''UPDATE outreach_drafts SET send_status=?, sent_at=CASE WHEN ?='sent' THEN CURRENT_TIMESTAMP ELSE sent_at END, gmail_message_id=?, gmail_thread_id=?, last_error=?, updated_at=CURRENT_TIMESTAMP WHERE id=?''',
+                     (status, status, gmail_message_id, gmail_thread_id, last_error, draft_id))
+        row = conn.execute('SELECT session_id FROM outreach_drafts WHERE id=?', (draft_id,)).fetchone()
+        if row and status == 'sent':
+            conn.execute('UPDATE outreach_sessions SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?', ('sent', int(row['session_id'])))
