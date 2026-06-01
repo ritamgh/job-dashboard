@@ -105,6 +105,7 @@ function render(){
         <button class="button secondary" onclick="researchOne(${s.id})">Research</button>
         <button class="button secondary" onclick="message(${s.id}, 'short')">Short</button>
         <button class="button secondary" onclick="message(${s.id}, 'founder')">Founder DM</button>
+        <button class="button secondary" onclick="message(${s.id}, 'founder', true)" title="Ignore cached text and generate a fresh founder DM">Regenerate</button>
         <div id="msg-${s.id}" class="message-box">${esc(s.message_short || s.message_founder || '')}</div>
       </td>
     </tr>`).join('');
@@ -119,15 +120,15 @@ async function researchOne(id){
   toast('Research complete');
 }
 
-async function message(id, style){
+async function message(id, style, force=false){
   const button = event?.target;
   if (button) button.disabled = true;
-  toast(`Generating ${style} message...`);
-  const res = await fetch(`/api/startups/${id}/message`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({style})});
+  toast(`${force ? 'Regenerating' : 'Generating'} ${style} message...`);
+  const res = await fetch(`/api/startups/${id}/message`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({style, force})});
   const data = await res.json();
   document.querySelector(`#msg-${id}`).textContent = data.message;
   await navigator.clipboard?.writeText(data.message).catch(()=>{});
-  toast(data.cached ? 'Copied cached message' : 'Generated and copied message');
+  toast(data.cached ? 'Copied cached message' : 'Generated fresh message and copied it');
   await load();
 }
 

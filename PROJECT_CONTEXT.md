@@ -34,7 +34,7 @@ The provided sheet has already been imported locally once. A CSV snapshot exists
 - `startup_search/scoring.py`: deterministic scoring and labels.
 - `startup_search/research.py`: crawler/research pipeline.
 - `startup_search/crawler/`: Scrapy-first batch research worker, settings, and startup spider.
-- `startup_search/llm.py`: OpenAI abstraction and dry-run message generation.
+- `startup_search/llm.py`: OpenAI abstraction and dry-run message generation. It cleans scraped product/title text into a company-specific detail, includes researched tags/evidence URLs/hiring context in the prompt, and avoids raw nav/title snippets in outreach.
 - `startup_search/sheet_scraper.py`: Google Sheet extraction helpers.
 - `data/startup-search-export.csv`: latest enriched/exportable CSV snapshot generated from the sheet.
 
@@ -46,3 +46,4 @@ The provided sheet has already been imported locally once. A CSV snapshot exists
 - Hiring `Yes` should only come from fetched website/careers evidence. Sheet-only rows are `Maybe` with `Hiring unverified`; the UI shows hiring evidence text plus the best careers/jobs/homepage evidence link below the label.
 - Batch research queue state lives in `research_runs`, `research_jobs`, and `research_fetches`. The dashboard can enqueue `Research next 100`/`Research all unverified`; the spawned worker logs to `data/crawler_logs/research-run-<id>.log`.
 - Research run progress shown by the API/UI is derived from `research_jobs` counts. The Scrapy spider finalizes each job as soon as that job's in-flight requests drain, so `completed`/`failed`/`needs_browser` should move during a run instead of only when the spider closes.
+- Outreach messages are cached per row unless the UI sends `force: true`; the dashboard has a `Regenerate` button for founder DMs so old generic cached messages can be replaced after prompt improvements.
