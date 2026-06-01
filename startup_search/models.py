@@ -15,6 +15,7 @@ class StartupInput(BaseModel):
     company: str
     website: str | None = None
     linkedin: str | None = None
+    founder_linkedin: str | None = None
     twitter: str | None = None
     funding: str | None = None
     raw: dict[str, Any] = Field(default_factory=dict)

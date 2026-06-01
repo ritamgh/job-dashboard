@@ -96,12 +96,13 @@ function render(){
   renderStats();
   const visible = visibleStartups();
   if (!visible.length) {
-    rowsEl.innerHTML = '<tr><td colspan="8" class="empty">No companies match the current filters. Try lowering the AI score or clearing search.</td></tr>';
+    rowsEl.innerHTML = '<tr><td colspan="9" class="empty">No companies match the current filters. Try lowering the AI score or clearing search.</td></tr>';
     return;
   }
   rowsEl.innerHTML = visible.map(s => `
     <tr>
       <td class="company"><strong>${esc(s.company)}</strong><br>${s.website ? `<a href="${esc(s.website)}" target="_blank" rel="noreferrer">website</a>` : ''} ${s.linkedin ? `<a href="${esc(s.linkedin)}" target="_blank" rel="noreferrer">linkedin</a>` : ''}</td>
+      <td>${s.founder_linkedin ? `<a href="${esc(s.founder_linkedin)}" target="_blank" rel="noreferrer">founder ↗</a>` : '<span class="subtle">—</span>'}</td>
       <td><span class="score">${esc(s.overall_score)}</span></td>
       <td>${esc(s.ai_native_score)}/10<br><small>${(s.tags || []).includes('Website-confirmed AI-native') ? 'website confirmed' : (Number(s.ai_native_score || 0) > 0 ? 'needs website confirmation' : 'no signal yet')}</small></td>
       <td>${esc(s.resume_fit_score)}/10</td>

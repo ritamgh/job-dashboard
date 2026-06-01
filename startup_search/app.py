@@ -114,7 +114,7 @@ async def research_one(startup_id: int):
     record = get_startup(startup_id)
     if not record:
         raise HTTPException(404, 'Startup not found')
-    result = await research_startup(StartupInput(**record.model_dump(include={'company','website','linkedin','twitter','funding','raw'})))
+    result = await research_startup(StartupInput(**record.model_dump(include={'company','website','linkedin','founder_linkedin','twitter','funding','raw'})))
     apply_research(startup_id, result)
     return get_startup(startup_id).model_dump()
 

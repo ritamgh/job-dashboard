@@ -6,7 +6,8 @@ from .models import StartupInput
 
 COMPANY_KEYS = ['company', 'company name', 'name', 'startup']
 WEBSITE_KEYS = ['website', 'site', 'url', 'company website']
-LINKEDIN_KEYS = ['company linkedin', 'linkedin', 'linkedin url']
+LINKEDIN_KEYS = ['company linkedin', 'company linkedin url']
+FOUNDER_LINKEDIN_KEYS = ['founder linkedin', 'founder linkedin url', 'founders linkedin', 'founders linkedin url', 'linkedin', 'linkedin url']
 TWITTER_KEYS = ['company twitter', 'twitter', 'x', 'x/twitter']
 FUNDING_KEYS = ['funding', 'round', 'amount', 'raise', 'funding round']
 
@@ -35,6 +36,7 @@ def normalize_row(row: dict[str, Any]) -> StartupInput | None:
         company=company,
         website=pick(row, WEBSITE_KEYS),
         linkedin=pick(row, LINKEDIN_KEYS),
+        founder_linkedin=pick(row, FOUNDER_LINKEDIN_KEYS),
         twitter=pick(row, TWITTER_KEYS),
         funding=pick(row, FUNDING_KEYS),
         raw={str(k): v for k, v in row.items()},

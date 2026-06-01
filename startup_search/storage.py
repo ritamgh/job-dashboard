@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS startups (
   company TEXT NOT NULL,
   website TEXT,
   linkedin TEXT,
+  founder_linkedin TEXT,
   twitter TEXT,
   funding TEXT,
   raw_json TEXT NOT NULL DEFAULT '{}',
@@ -78,6 +79,25 @@ CREATE TABLE IF NOT EXISTS research_fetches (
 CREATE INDEX IF NOT EXISTS idx_research_fetches_job ON research_fetches(job_id);
 '''
 
+
+def infer_founder_linkedin(raw: dict, company_linkedin: str | None = None) -> str | None:
+    keys = ['Founder LinkedIn', 'Founder Linkedin', 'Founders LinkedIn', 'Founders Linkedin', 'Linkedin', 'LinkedIn', 'LinkedIn URL', 'Linkedin URL']
+    for key in keys:
+        val = raw.get(key)
+        if val is not None and str(val).strip():
+            link = str(val).strip()
+            if company_linkedin and link == company_linkedin:
+                continue
+            return link
+    return None
+
+
+def ensure_schema(conn: sqlite3.Connection) -> None:
+    conn.executescript(SCHEMA)
+    columns = {row['name'] for row in conn.execute('PRAGMA table_info(startups)').fetchall()}
+    if 'founder_linkedin' not in columns:
+        conn.execute('ALTER TABLE startups ADD COLUMN founder_linkedin TEXT')
+
 @contextmanager
 def connect():
     settings = get_settings()
@@ -87,7 +107,7 @@ def connect():
     conn.execute('PRAGMA journal_mode=WAL')
     conn.execute('PRAGMA busy_timeout=5000')
     try:
-        conn.executescript(SCHEMA)
+        ensure_schema(conn)
         yield conn
         conn.commit()
     finally:
@@ -97,6 +117,7 @@ def connect():
 def row_to_record(row: sqlite3.Row) -> StartupRecord:
     data = dict(row)
     data['raw'] = json.loads(data.pop('raw_json') or '{}')
+    data['founder_linkedin'] = data.get('founder_linkedin') or infer_founder_linkedin(data['raw'], data.get('linkedin'))
     data['evidence_urls'] = json.loads(data.pop('evidence_urls_json') or '[]')
     data['tags'] = json.loads(data.pop('tags_json') or '[]')
     data.pop('created_at', None)
@@ -108,11 +129,11 @@ def upsert_startup(startup: StartupInput) -> int:
     with connect() as conn:
         existing = conn.execute('SELECT id FROM startups WHERE company=? AND COALESCE(website, "")=COALESCE(?, "")', (startup.company, startup.website)).fetchone()
         if existing:
-            conn.execute('''UPDATE startups SET linkedin=?, twitter=?, funding=?, raw_json=?, updated_at=CURRENT_TIMESTAMP WHERE id=?''',
-                         (startup.linkedin, startup.twitter, startup.funding, json.dumps(startup.raw), existing['id']))
+            conn.execute('''UPDATE startups SET linkedin=?, founder_linkedin=?, twitter=?, funding=?, raw_json=?, updated_at=CURRENT_TIMESTAMP WHERE id=?''',
+                         (startup.linkedin, startup.founder_linkedin or infer_founder_linkedin(startup.raw, startup.linkedin), startup.twitter, startup.funding, json.dumps(startup.raw), existing['id']))
             return int(existing['id'])
-        cur = conn.execute('''INSERT INTO startups(company, website, linkedin, twitter, funding, raw_json) VALUES(?,?,?,?,?,?)''',
-                           (startup.company, startup.website, startup.linkedin, startup.twitter, startup.funding, json.dumps(startup.raw)))
+        cur = conn.execute('''INSERT INTO startups(company, website, linkedin, founder_linkedin, twitter, funding, raw_json) VALUES(?,?,?,?,?,?,?)''',
+                           (startup.company, startup.website, startup.linkedin, startup.founder_linkedin or infer_founder_linkedin(startup.raw, startup.linkedin), startup.twitter, startup.funding, json.dumps(startup.raw)))
         return int(cur.lastrowid)
 
 
@@ -158,7 +179,7 @@ def save_message(startup_id: int, style: str, message: str) -> None:
 def export_csv(path: Path) -> Path:
     records = list_startups()
     path.parent.mkdir(parents=True, exist_ok=True)
-    fields = ['id','company','website','linkedin','twitter','funding','product_summary','overall_score','ai_native_score','interestingness_score','resume_fit_score','hiring_likelihood_score','learning_challenge_score','logistics_score','hiring_status','hiring_evidence','remote_india_fit','research_confidence','tags','evidence_urls','message_short','message_founder']
+    fields = ['id','company','website','linkedin','founder_linkedin','twitter','funding','product_summary','overall_score','ai_native_score','interestingness_score','resume_fit_score','hiring_likelihood_score','learning_challenge_score','logistics_score','hiring_status','hiring_evidence','remote_india_fit','research_confidence','tags','evidence_urls','message_short','message_founder']
     with path.open('w', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=fields)
         writer.writeheader()
