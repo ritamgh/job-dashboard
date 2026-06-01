@@ -24,6 +24,9 @@ function preferredMessage(s){
   if (selected === 'founder') return s.message_founder || s.message_short || '';
   return s.message_founder || s.message_short || '';
 }
+function founderLinkedIn(s){
+  return s.founder_linkedin || s.raw?.['Founder LinkedIn'] || s.raw?.['Founder Linkedin'] || s.raw?.['Founders LinkedIn'] || s.raw?.['Founders Linkedin'] || s.raw?.Linkedin || s.raw?.LinkedIn || '';
+}
 function hiringEvidenceHtml(s){
   const url = bestHiringUrl(s);
   return `
@@ -102,7 +105,7 @@ function render(){
   rowsEl.innerHTML = visible.map(s => `
     <tr>
       <td class="company"><strong>${esc(s.company)}</strong><br>${s.website ? `<a href="${esc(s.website)}" target="_blank" rel="noreferrer">website</a>` : ''} ${s.linkedin ? `<a href="${esc(s.linkedin)}" target="_blank" rel="noreferrer">linkedin</a>` : ''}</td>
-      <td>${s.founder_linkedin ? `<a href="${esc(s.founder_linkedin)}" target="_blank" rel="noreferrer">founder ↗</a>` : '<span class="subtle">—</span>'}</td>
+      <td>${founderLinkedIn(s) ? `<a href="${esc(founderLinkedIn(s))}" target="_blank" rel="noreferrer">founder ↗</a>` : '<span class="subtle">—</span>'}</td>
       <td><span class="score">${esc(s.overall_score)}</span></td>
       <td>${esc(s.ai_native_score)}/10<br><small>${(s.tags || []).includes('Website-confirmed AI-native') ? 'website confirmed' : (Number(s.ai_native_score || 0) > 0 ? 'needs website confirmation' : 'no signal yet')}</small></td>
       <td>${esc(s.resume_fit_score)}/10</td>
