@@ -4,7 +4,7 @@ from openai import AsyncOpenAI
 from .config import get_settings
 from .models import StartupRecord
 
-PROFILE = '''Ritam Ghosh is a 3rd-year B.Tech AI student at SRM University with production experience building multi-agent LLM systems using LangGraph, RAG systems, computer vision deployments with YOLO/OpenCV, FastAPI/Flask backends, Docker, LangSmith observability, and vector search.'''
+PROFILE = '''Ritam Ghosh builds agentic workflows, multi-agent systems, and RAG/CV products. He is currently a 3rd-year AI student looking for internship or project work where he can prove himself by building something useful first. His experience includes LangGraph, RAG systems, YOLO/OpenCV computer vision deployments, FastAPI/Flask backends, Docker, LangSmith observability, and vector search.'''
 
 NAV_PHRASES = (
     'how it works', 'product', 'products', 'pricing', 'blog', 'docs', 'documentation',
@@ -52,10 +52,43 @@ def company_angle(startup: StartupRecord) -> str:
     return 'the product you are building'
 
 
+def observation_angle(startup: StartupRecord) -> str:
+    detail = company_angle(startup)
+    if detail.startswith(('build ', 'deploy ', 'create ', 'turn ', 'make ', 'help ')):
+        return f'the push to {detail}'
+    return detail
+
+
+def has_clear_ai_fit(startup: StartupRecord) -> bool:
+    return startup.ai_native_score >= 6 and startup.resume_fit_score >= 6
+
+
+def help_offer(startup: StartupRecord) -> str:
+    tags = ' '.join(startup.tags).lower()
+    summary = (startup.product_summary or '').lower()
+    context = f'{tags} {summary}'
+    if 'developer' in context or 'workflow' in context or 'agent' in context:
+        return 'build a small agent/RAG workflow, integration, or example that shows how developers could use the product'
+    if 'rag' in context or 'search' in context or 'knowledge' in context:
+        return 'prototype a small RAG workflow, eval harness, or retrieval demo around one real use case'
+    if 'vision' in context or 'video' in context or 'image' in context or 'computer vision' in context:
+        return 'prototype a lightweight CV pipeline or demo around one real product use case'
+    if has_clear_ai_fit(startup):
+        return 'turn one AI use case into a working workflow/demo instead of just talking about fit'
+    return 'take a shot at a lightweight AI/backend workflow or prototype to prove I can help'
+
+
+def closing_ask(startup: StartupRecord) -> str:
+    if has_clear_ai_fit(startup):
+        return 'Could I send over one concrete idea?'
+    return 'If there’s a small AI/backend workflow you’ve wanted to test, could I take a shot at prototyping it?'
+
+
 def researched_context(startup: StartupRecord) -> str:
     lines = [
         f'Company: {startup.company}',
         f'Website: {startup.website or "Unknown"}',
+        f'Fit classification: {"strong" if has_clear_ai_fit(startup) else "weak/unclear"}',
         f'Best product/problem detail: {clean_company_note(startup, 260) or "No researched product detail available"}',
         f'Raw researched summary: {startup.product_summary or "None"}',
         f'Tags/signals: {", ".join(startup.tags) if startup.tags else "None"}',
@@ -63,24 +96,31 @@ def researched_context(startup: StartupRecord) -> str:
         f'Hiring evidence: {startup.hiring_evidence or "None"}',
         f'Remote/India fit: {startup.remote_india_fit or "Unknown"}',
         f'Evidence URLs: {", ".join(startup.evidence_urls[:4]) if startup.evidence_urls else "None"}',
+        f'Suggested value-first offer: {help_offer(startup)}',
+        f'Suggested closing ask: {closing_ask(startup)}',
         f'Scores: AI-native {startup.ai_native_score}/10, resume-fit {startup.resume_fit_score}/10, interestingness {startup.interestingness_score}/10, learning challenge {startup.learning_challenge_score}/10',
     ]
     return '\n'.join(lines)
 
 
 def fallback_message(startup: StartupRecord, style: str) -> str:
-    product = company_angle(startup)
-    angle = 'LLM agents/RAG/CV systems' if startup.resume_fit_score >= 5 else 'AI engineering and product-building'
+    product = observation_angle(startup)
+    offer = help_offer(startup)
+    ask = closing_ask(startup)
     if style == 'short':
+        if has_clear_ai_fit(startup):
+            return (
+                f"Hi, I’m Ritam. I build agentic workflows, multi-agent systems, and RAG/CV products, and {startup.company}'s work around {product} felt relevant to that. "
+                "I had one concrete idea that might be useful. Could I send it over?"
+            )
         return (
-            f"Hi, I’m Ritam, a 3rd-year AI student. {startup.company} stood out because it’s working on {product}. "
-            "I’ve built LangGraph/RAG and CV systems, and I’d love to connect if an AI intern could help."
+            "Hi, I’m Ritam. I build agentic workflows, multi-agent systems, and RAG/CV products, and I’m trying to earn opportunities by building small useful things first. "
+            "If there’s a lightweight AI/backend prototype you’ve wanted to test, I’d be happy to take a shot."
         )
     return (
-        f"Hi, I’m Ritam, a 3rd-year B.Tech AI student at SRM. I was looking into {startup.company} and the part that caught me was {product}.\n\n"
-        f"That maps closely to problems I’ve worked on with {angle}: multi-agent GenAI workflows, RAG pipelines, CV deployments, backend APIs, and observability.\n\n"
-        "If there’s room for an AI/ML intern who can prototype fast and turn messy AI ideas into working systems, I’d love to help. "
-        "Would you be open to a quick chat?"
+        f"Hi, I’m Ritam. I build agentic workflows, multi-agent systems, and RAG/CV products. I was looking at {startup.company} and noticed {product}.\n\n"
+        f"I’m currently a 3rd-year AI student looking for internship/project work, but I’d rather prove fit by building something useful first. For your team, I could {offer}.\n\n"
+        f"{ask}"
     )
 
 
@@ -91,25 +131,33 @@ async def generate_message(startup: StartupRecord, style: str) -> str:
     client = AsyncOpenAI(api_key=settings.openai_api_key)
     length = 'under 280 characters for a LinkedIn connection request' if style == 'short' else '5-7 concise lines for a founder LinkedIn DM'
     style_rules = (
-        'Write exactly 2 sentences. No line breaks. Make it fit a connection request.'
+        'Write exactly 2 sentences. No line breaks. Make it fit a connection request. Open with "I’m Ritam" plus what he builds. End by offering one specific useful idea or a small prototype, not by asking for an internship directly.'
         if style == 'short'
-        else 'Write 3 short paragraphs with line breaks. Paragraph 1 proves company research, paragraph 2 maps Ritam to their likely needs, paragraph 3 asks for a quick chat.'
+        else 'Write 3 short paragraphs with line breaks. Paragraph 1 introduces Ritam as a builder and makes one natural company-specific observation. Paragraph 2 mentions he is a 3rd-year AI student looking for internship/project work, but frames credibility around building something useful first. Paragraph 3 asks permission to send one concrete idea or prototype one small problem.'
     )
     prompt = f'''
 Write a highly specific cold LinkedIn message, {length}.
 Do not invent facts. Use only the company notes and student profile below.
 Tone: human, ambitious, direct, student-founder friendly, not salesy.
-Ask for an AI/ML internship or a quick chat.
+Goal: value-first outreach. The message should feel like "I noticed what you're building and can help with a small concrete AI workflow/demo/integration," not "student asking for a job."
 {style_rules}
 
 Quality rules:
+- Do not mention SRM University unless the user explicitly asks for it later.
+- Do not lead with "3rd-year" in founder DMs. If education appears, keep it secondary.
+- Introduce Ritam as someone who builds agentic workflows, multi-agent systems, and RAG/CV products.
+- Do not use phrases like "found the product interesting", "my strongest fit", "caught my eye", "passionate about", or "possible AI internship work".
+- Do not paste a product description after a generic compliment.
+- Do not ask directly for an internship in the first line.
 - Do not say "caught my eye because of" followed by a raw page title or copied snippet.
 - Do not repeat the company name/title/nav text.
-- Lead with the specific product/problem the company appears to work on.
-- Connect that detail to Ritam's LangGraph/RAG/CV/backend experience in one concrete way.
+- Lead with a natural observation about the specific product/problem the company appears to work on.
+- Connect that detail to one concrete contribution Ritam could make: example workflow, agent/RAG demo, integration, eval harness, docs/template, backend prototype, or CV pipeline.
+- If company fit is strong, ask to send one concrete idea.
+- If company fit is weak or unclear, do not fake relevance. Ask whether there is a small AI/backend workflow Ritam could prototype to prove he can help.
 - Sound like a thoughtful individual DM, not a template.
 - If the research is thin, be honest and phrase it as "I was looking at..." rather than pretending deep knowledge.
-- Avoid generic phrases like "possible AI internship work", "I found the product interesting", and "I would love to connect" unless tied to a concrete contribution.
+- Make the ask lightweight: "Would it be useful if I sent one specific idea?" or "Open to a quick chat?"
 
 Student profile: {PROFILE}
 Researched company context:
@@ -117,7 +165,7 @@ Researched company context:
 '''.strip()
     response = await client.chat.completions.create(
         model=settings.openai_message_model,
-        messages=[{'role': 'system', 'content': 'You write concise, honest founder outreach for internships.'}, {'role': 'user', 'content': prompt}],
+        messages=[{'role': 'system', 'content': 'You write concise, value-first founder outreach for a student builder earning internship/project opportunities by offering to build something useful first.'}, {'role': 'user', 'content': prompt}],
         temperature=0.5,
     )
     return response.choices[0].message.content.strip()

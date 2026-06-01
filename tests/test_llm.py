@@ -1,4 +1,4 @@
-from startup_search.llm import clean_company_note, fallback_message, researched_context
+from startup_search.llm import clean_company_note, closing_ask, fallback_message, help_offer, researched_context
 from startup_search.models import HiringStatus, StartupRecord
 
 
@@ -38,15 +38,47 @@ def test_clean_company_note_removes_raw_title_and_nav_text():
 def test_fallback_message_uses_specific_researched_detail():
     message = fallback_message(make_startup(), 'founder')
 
+    assert message.startswith('Hi, I’m Ritam. I build agentic workflows')
     assert 'fully-managed AI agents and workflows' in message
     assert 'How it works' not in message
     assert 'Product Pricing' not in message
     assert 'possible AI internship work' not in message
+    assert 'SRM' not in message
+    assert 'found the product interesting' not in message.lower()
+    assert 'strongest fit' not in message.lower()
+    assert '3rd-year AI student' in message
+    assert 'one concrete idea' in message
+
+
+def test_strong_fit_offer_asks_to_send_a_concrete_idea():
+    startup = make_startup()
+
+    assert 'agent/RAG workflow' in help_offer(startup)
+    assert closing_ask(startup) == 'Could I send over one concrete idea?'
+
+
+def test_weak_fit_does_not_fake_relevance_and_asks_to_prototype():
+    startup = make_startup(
+        company='OpsCo',
+        product_summary='OpsCo helps finance teams manage vendor approvals and spend controls.',
+        ai_native_score=2,
+        resume_fit_score=3,
+        tags=['SaaS', 'Finance'],
+    )
+    message = fallback_message(startup, 'founder')
+
+    assert 'agent/RAG workflow' not in help_offer(startup)
+    assert 'small AI/backend workflow' in closing_ask(startup)
+    assert 'could I take a shot at prototyping it' in message
+    assert 'I build agentic workflows, multi-agent systems, and RAG/CV products' in message
 
 
 def test_researched_context_includes_crawler_evidence_for_prompt():
     context = researched_context(make_startup())
 
+    assert 'Fit classification: strong' in context
     assert 'Best product/problem detail: Build and deploy fully-managed AI agents and workflows' in context
     assert 'Tags/signals: Website-confirmed AI-native, AI agents, Developer tooling' in context
     assert 'Evidence URLs: https://trigger.dev, https://trigger.dev/careers' in context
+    assert 'Suggested value-first offer: build a small agent/RAG workflow' in context
+    assert 'Suggested closing ask: Could I send over one concrete idea?' in context

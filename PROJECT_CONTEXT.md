@@ -34,7 +34,7 @@ The provided sheet has already been imported locally once. A CSV snapshot exists
 - `startup_search/scoring.py`: deterministic scoring and labels.
 - `startup_search/research.py`: crawler/research pipeline.
 - `startup_search/crawler/`: Scrapy-first batch research worker, settings, and startup spider.
-- `startup_search/llm.py`: OpenAI abstraction and dry-run message generation. It cleans scraped product/title text into a company-specific detail, includes researched tags/evidence URLs/hiring context in the prompt, and avoids raw nav/title snippets in outreach.
+- `startup_search/llm.py`: OpenAI abstraction and dry-run message generation. It cleans scraped product/title text into a company-specific detail, includes researched tags/evidence URLs/hiring context in the prompt, and avoids raw nav/title snippets in outreach. Outreach is value-first: introduce Ritam as building agentic workflows, multi-agent systems, and RAG/CV products; mention student status only as secondary context; ask to send a concrete idea for strong-fit companies or prototype a small AI/backend workflow for weak/unclear-fit companies.
 - `startup_search/sheet_scraper.py`: Google Sheet extraction helpers.
 - `data/startup-search-export.csv`: latest enriched/exportable CSV snapshot generated from the sheet.
 
