@@ -1,7 +1,7 @@
 # Project Context
 
 ## Purpose
-Local research dashboard for ranking 1.5k+ recently funded startups for Ritam Ghosh's AI/ML internship search. The app ingests a public, non-downloadable Google Sheet via read-only extraction, researches company websites/jobs pages, scores AI-native internship fit, and generates LinkedIn outreach messages on demand.
+Local research dashboard for ranking 1.5k+ recently funded startups for Ritam Ghosh's AI/ML internship search. The app ingests a public, non-downloadable Google Sheet via read-only extraction, researches company websites/jobs pages, scores AI-native internship fit, generates LinkedIn outreach messages on demand, and includes a standalone outreach cockpit for arbitrary company URLs.
 
 ## Key user constraints
 - Optimize for balanced fit: interesting AI-native products plus realistic hiring chance.
@@ -31,10 +31,14 @@ The provided sheet has already been imported locally once. A CSV snapshot exists
 - `resume/master_resume 2.pdf`: source resume used for targeting.
 - `startup_search/app.py`: FastAPI routes.
 - `startup_search/storage.py`: SQLite schema and persistence helpers. Stores company LinkedIn/X separately from `founder_linkedin` and `founder_twitter`; old rows infer founder links from raw sheet fields like `Linkedin` and `Twitter`.
+- `startup_search/outreach.py`: orchestration for the standalone `/outreach` workflow: research a URL, discover contacts, generate drafts, and send a reviewed email.
+- `startup_search/contact_search.py`: Serper-backed contact discovery. Requires `STARTUP_SEARCH_SERPER_API_KEY`; returns source-visible candidates and avoids inventing confident emails.
+- `startup_search/gmail.py`: safe Gmail send boundary. Without `STARTUP_SEARCH_GMAIL_MCP_COMMAND`, sending returns a dry-run failure instead of sending. Real sends require explicit UI/API confirmation.
 - `startup_search/scoring.py`: deterministic scoring and labels.
 - `startup_search/research.py`: crawler/research pipeline.
 - `startup_search/crawler/`: Scrapy-first batch research worker, settings, and startup spider.
 - `startup_search/llm.py`: OpenAI abstraction and dry-run message generation. It cleans scraped product/title text into a company-specific detail, includes researched tags/evidence URLs/hiring context in the prompt, and avoids raw nav/title snippets in outreach. Outreach is value-first across short LinkedIn, founder DM, and cold email formats: introduce Ritam as building agentic workflows, multi-agent systems, and RAG/CV products; mention student status only as secondary context; ask to send a concrete idea or ask what small thing the founder would like Ritam to build to prove he can help.
+- `startup_search/static/outreach.html` and `startup_search/static/outreach.js`: separate URL-first outreach cockpit UI with editable cold email, LinkedIn DM, follow-up drafts, manual/Serper recipient selection, and explicit send confirmation.
 - `startup_search/sheet_scraper.py`: Google Sheet extraction helpers.
 - `data/startup-search-export.csv`: latest enriched/exportable CSV snapshot generated from the sheet.
 
@@ -48,3 +52,4 @@ The provided sheet has already been imported locally once. A CSV snapshot exists
 - Research run progress shown by the API/UI is derived from `research_jobs` counts. The Scrapy spider finalizes each job as soon as that job's in-flight requests drain, so `completed`/`failed`/`needs_browser` should move during a run instead of only when the spider closes.
 - Outreach messages are cached per row unless the UI sends `force: true`; the dashboard has regenerate buttons for founder DMs and cold emails so old generic cached messages can be replaced after prompt improvements.
 - The source sheet has separate company and founder social columns: `Company LinkedIn`/`Company Twitter` are company links, while `Linkedin`/`Twitter` are founder links. Keep them split in imports/API/UI: company links belong in `linkedin`/`twitter`, founder links belong in `founder_linkedin`/`founder_twitter`.
+- The outreach cockpit stores separate `outreach_sessions`, `outreach_contacts`, and `outreach_drafts` tables instead of adding arbitrary URL sessions to the main `startups` table. Email sending is intentionally gated twice: the browser confirm dialog and API `confirm_send: true`.
