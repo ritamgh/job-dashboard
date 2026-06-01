@@ -46,6 +46,7 @@ class StartupResearchSpider(scrapy.Spider):
                 website=job.get('website'),
                 linkedin=job.get('linkedin'),
                 twitter=job.get('twitter'),
+                founder_twitter=job.get('founder_twitter'),
                 funding=job.get('funding'),
                 raw=job.get('raw') or {},
             )

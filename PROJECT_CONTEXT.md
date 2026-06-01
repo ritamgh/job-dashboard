@@ -30,7 +30,7 @@ The provided sheet has already been imported locally once. A CSV snapshot exists
 - `plan/scrapy-first-playwright-later-plan.md`: office-hours design plan for durable Scrapy-first batch research with later Playwright fallback.
 - `resume/master_resume 2.pdf`: source resume used for targeting.
 - `startup_search/app.py`: FastAPI routes.
-- `startup_search/storage.py`: SQLite schema and persistence helpers. Stores company LinkedIn separately from `founder_linkedin`; old rows infer founder links from raw sheet fields like `Linkedin`.
+- `startup_search/storage.py`: SQLite schema and persistence helpers. Stores company LinkedIn/X separately from `founder_linkedin` and `founder_twitter`; old rows infer founder links from raw sheet fields like `Linkedin` and `Twitter`.
 - `startup_search/scoring.py`: deterministic scoring and labels.
 - `startup_search/research.py`: crawler/research pipeline.
 - `startup_search/crawler/`: Scrapy-first batch research worker, settings, and startup spider.
@@ -47,4 +47,4 @@ The provided sheet has already been imported locally once. A CSV snapshot exists
 - Batch research queue state lives in `research_runs`, `research_jobs`, and `research_fetches`. The dashboard can enqueue `Research next 100`/`Research all unverified`; the spawned worker logs to `data/crawler_logs/research-run-<id>.log`.
 - Research run progress shown by the API/UI is derived from `research_jobs` counts. The Scrapy spider finalizes each job as soon as that job's in-flight requests drain, so `completed`/`failed`/`needs_browser` should move during a run instead of only when the spider closes.
 - Outreach messages are cached per row unless the UI sends `force: true`; the dashboard has regenerate buttons for founder DMs and cold emails so old generic cached messages can be replaced after prompt improvements.
-- The source sheet has separate `Company LinkedIn` and founder `Linkedin` columns. Keep them split in imports/API/UI: company profile links belong in `linkedin`, founder profile links belong in `founder_linkedin`.
+- The source sheet has separate company and founder social columns: `Company LinkedIn`/`Company Twitter` are company links, while `Linkedin`/`Twitter` are founder links. Keep them split in imports/API/UI: company links belong in `linkedin`/`twitter`, founder links belong in `founder_linkedin`/`founder_twitter`.
