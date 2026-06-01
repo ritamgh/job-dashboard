@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS startups (
   tags_json TEXT NOT NULL DEFAULT '[]',
   message_short TEXT,
   message_founder TEXT,
+  message_email TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -97,6 +98,8 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
     columns = {row['name'] for row in conn.execute('PRAGMA table_info(startups)').fetchall()}
     if 'founder_linkedin' not in columns:
         conn.execute('ALTER TABLE startups ADD COLUMN founder_linkedin TEXT')
+    if 'message_email' not in columns:
+        conn.execute('ALTER TABLE startups ADD COLUMN message_email TEXT')
 
 @contextmanager
 def connect():
@@ -171,7 +174,7 @@ def apply_research(startup_id: int, result: ResearchResult) -> None:
 
 
 def save_message(startup_id: int, style: str, message: str) -> None:
-    column = 'message_short' if style == 'short' else 'message_founder'
+    column = {'short': 'message_short', 'founder': 'message_founder', 'email': 'message_email'}[style]
     with connect() as conn:
         conn.execute(f'UPDATE startups SET {column}=?, updated_at=CURRENT_TIMESTAMP WHERE id=?', (message, startup_id))
 
@@ -179,7 +182,7 @@ def save_message(startup_id: int, style: str, message: str) -> None:
 def export_csv(path: Path) -> Path:
     records = list_startups()
     path.parent.mkdir(parents=True, exist_ok=True)
-    fields = ['id','company','website','linkedin','founder_linkedin','twitter','funding','product_summary','overall_score','ai_native_score','interestingness_score','resume_fit_score','hiring_likelihood_score','learning_challenge_score','logistics_score','hiring_status','hiring_evidence','remote_india_fit','research_confidence','tags','evidence_urls','message_short','message_founder']
+    fields = ['id','company','website','linkedin','founder_linkedin','twitter','funding','product_summary','overall_score','ai_native_score','interestingness_score','resume_fit_score','hiring_likelihood_score','learning_challenge_score','logistics_score','hiring_status','hiring_evidence','remote_india_fit','research_confidence','tags','evidence_urls','message_short','message_founder','message_email']
     with path.open('w', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=fields)
         writer.writeheader()

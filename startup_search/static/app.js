@@ -22,7 +22,8 @@ function preferredMessage(s){
   const selected = messageStyles[s.id];
   if (selected === 'short') return s.message_short || s.message_founder || '';
   if (selected === 'founder') return s.message_founder || s.message_short || '';
-  return s.message_founder || s.message_short || '';
+  if (selected === 'email') return s.message_email || s.message_founder || s.message_short || '';
+  return s.message_founder || s.message_short || s.message_email || '';
 }
 function founderLinkedIn(s){
   return s.founder_linkedin || s.raw?.['Founder LinkedIn'] || s.raw?.['Founder Linkedin'] || s.raw?.['Founders LinkedIn'] || s.raw?.['Founders Linkedin'] || s.raw?.Linkedin || s.raw?.LinkedIn || '';
@@ -105,7 +106,7 @@ function render(){
   rowsEl.innerHTML = visible.map(s => `
     <tr>
       <td class="company"><strong>${esc(s.company)}</strong><br>${s.website ? `<a href="${esc(s.website)}" target="_blank" rel="noreferrer">website</a>` : ''} ${s.linkedin ? `<a href="${esc(s.linkedin)}" target="_blank" rel="noreferrer">linkedin</a>` : ''}</td>
-      <td>${founderLinkedIn(s) ? `<a href="${esc(founderLinkedIn(s))}" target="_blank" rel="noreferrer">founder ↗</a>` : '<span class="subtle">—</span>'}</td>
+      <td>${founderLinkedIn(s) ? `<a href="${esc(founderLinkedIn(s))}" target="_blank" rel="noreferrer">founder ↗</a>` : '<span class="subtle">n/a</span>'}</td>
       <td><span class="score">${esc(s.overall_score)}</span></td>
       <td>${esc(s.ai_native_score)}/10<br><small>${(s.tags || []).includes('Website-confirmed AI-native') ? 'website confirmed' : (Number(s.ai_native_score || 0) > 0 ? 'needs website confirmation' : 'no signal yet')}</small></td>
       <td>${esc(s.resume_fit_score)}/10</td>
@@ -116,7 +117,9 @@ function render(){
         <button class="button secondary" onclick="researchOne(${s.id})">Research</button>
         <button class="button secondary" onclick="message(${s.id}, 'short')">Short</button>
         <button class="button secondary" onclick="message(${s.id}, 'founder')">Founder DM</button>
+        <button class="button secondary" onclick="message(${s.id}, 'email')">Cold Email</button>
         <button class="button" onclick="message(${s.id}, 'founder', true)" title="Ignore cached text and generate a fresh founder DM">Regenerate Founder</button>
+        <button class="button" onclick="message(${s.id}, 'email', true)" title="Ignore cached text and generate a fresh cold email">Regenerate Email</button>
         <div id="msg-${s.id}" class="message-box">${esc(preferredMessage(s))}</div>
       </td>
     </tr>`).join('');

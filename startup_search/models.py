@@ -39,6 +39,7 @@ class StartupRecord(StartupInput):
     tags: list[str] = Field(default_factory=list)
     message_short: str | None = None
     message_founder: str | None = None
+    message_email: str | None = None
 
 
 class ResearchResult(BaseModel):
@@ -58,5 +59,5 @@ class ResearchResult(BaseModel):
 
 
 class MessageRequest(BaseModel):
-    style: str = Field(pattern='^(short|founder)$')
+    style: str = Field(pattern='^(short|founder|email)$')
     force: bool = False

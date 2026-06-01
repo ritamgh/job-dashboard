@@ -44,6 +44,8 @@ def api_startups(limit: int = 5000, q: str | None = None):
             data['message_short'] = None
         if is_stale_message(data.get('message_founder')):
             data['message_founder'] = None
+        if is_stale_message(data.get('message_email')):
+            data['message_email'] = None
         rows.append(data)
     return rows
 
@@ -131,7 +133,11 @@ async def message(startup_id: int, request: MessageRequest):
     record = get_startup(startup_id)
     if not record:
         raise HTTPException(404, 'Startup not found')
-    existing = record.message_short if request.style == 'short' else record.message_founder
+    existing = {
+        'short': record.message_short,
+        'founder': record.message_founder,
+        'email': record.message_email,
+    }[request.style]
     if existing and not request.force and not is_stale_message(existing):
         return {'message': existing, 'cached': True}
     generated = await generate_message(record, request.style)

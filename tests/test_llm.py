@@ -48,13 +48,15 @@ def test_fallback_message_uses_specific_researched_detail():
     assert 'strongest fit' not in message.lower()
     assert '4th-year AI student' in message
     assert 'one concrete idea' in message
+    assert 'internship/' 'project work' not in message
+    assert '\u2014' not in message
 
 
 def test_strong_fit_offer_asks_to_send_a_concrete_idea():
     startup = make_startup()
 
     assert 'agent/RAG workflow' in help_offer(startup)
-    assert closing_ask(startup) == 'Could I send over one concrete idea?'
+    assert closing_ask(startup) == 'Could I send one concrete idea, or is there something specific you’d like me to build to prove I can help?'
 
 
 def test_weak_fit_does_not_fake_relevance_and_asks_to_prototype():
@@ -69,7 +71,7 @@ def test_weak_fit_does_not_fake_relevance_and_asks_to_prototype():
 
     assert 'agent/RAG workflow' not in help_offer(startup)
     assert 'small AI/backend workflow' in closing_ask(startup)
-    assert 'could I take a shot at prototyping it' in message
+    assert 'could I take a shot at building it to prove I can help' in message
     assert 'I build agentic workflows, multi-agent systems, and RAG/CV products' in message
 
 
@@ -81,7 +83,7 @@ def test_researched_context_includes_crawler_evidence_for_prompt():
     assert 'Tags/signals: Website-confirmed AI-native, AI agents, Developer tooling' in context
     assert 'Evidence URLs: https://trigger.dev, https://trigger.dev/careers' in context
     assert 'Suggested value-first offer: build a small agent/RAG workflow' in context
-    assert 'Suggested closing ask: Could I send over one concrete idea?' in context
+    assert 'Suggested closing ask: Could I send one concrete idea' in context
 
 
 def test_old_template_messages_are_marked_stale():
@@ -89,12 +91,24 @@ def test_old_template_messages_are_marked_stale():
     fresh = fallback_message(make_startup(), 'founder')
 
     assert is_stale_message(old)
-    assert is_stale_message('Hi [Name] — I’m Ritam, a builder.')
+    assert is_stale_message('Hi [Name] \u2014 I’m Ritam, a builder.')
+    assert is_stale_message('I’m looking for internship/' 'project work.')
     assert not is_stale_message(fresh)
 
 
 def test_generated_message_cleanup_removes_name_placeholder():
-    cleaned = clean_generated_message('Hi [Name] — I’m Ritam, and I build agentic workflows.')
+    cleaned = clean_generated_message('Hi [Name] \u2014 I’m Ritam, and I build agentic workflows.')
 
     assert cleaned == 'Hi, I’m Ritam, and I build agentic workflows.'
     assert '[Name]' not in cleaned
+    assert '\u2014' not in cleaned
+
+
+def test_fallback_email_has_subject_and_build_to_prove_value_ask():
+    message = fallback_message(make_startup(), 'email')
+
+    assert message.startswith('Subject:')
+    assert 'looking for an internship' in message
+    assert 'internship/' 'project work' not in message
+    assert 'something specific you’d like me to build to prove I can help' in message
+    assert '\u2014' not in message

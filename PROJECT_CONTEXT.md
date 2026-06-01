@@ -34,7 +34,7 @@ The provided sheet has already been imported locally once. A CSV snapshot exists
 - `startup_search/scoring.py`: deterministic scoring and labels.
 - `startup_search/research.py`: crawler/research pipeline.
 - `startup_search/crawler/`: Scrapy-first batch research worker, settings, and startup spider.
-- `startup_search/llm.py`: OpenAI abstraction and dry-run message generation. It cleans scraped product/title text into a company-specific detail, includes researched tags/evidence URLs/hiring context in the prompt, and avoids raw nav/title snippets in outreach. Outreach is value-first: introduce Ritam as building agentic workflows, multi-agent systems, and RAG/CV products; mention student status only as secondary context; ask to send a concrete idea for strong-fit companies or prototype a small AI/backend workflow for weak/unclear-fit companies.
+- `startup_search/llm.py`: OpenAI abstraction and dry-run message generation. It cleans scraped product/title text into a company-specific detail, includes researched tags/evidence URLs/hiring context in the prompt, and avoids raw nav/title snippets in outreach. Outreach is value-first across short LinkedIn, founder DM, and cold email formats: introduce Ritam as building agentic workflows, multi-agent systems, and RAG/CV products; mention student status only as secondary context; ask to send a concrete idea or ask what small thing the founder would like Ritam to build to prove he can help.
 - `startup_search/sheet_scraper.py`: Google Sheet extraction helpers.
 - `data/startup-search-export.csv`: latest enriched/exportable CSV snapshot generated from the sheet.
 
@@ -46,5 +46,5 @@ The provided sheet has already been imported locally once. A CSV snapshot exists
 - Hiring `Yes` should only come from fetched website/careers evidence. Sheet-only rows are `Maybe` with `Hiring unverified`; the UI shows hiring evidence text plus the best careers/jobs/homepage evidence link below the label.
 - Batch research queue state lives in `research_runs`, `research_jobs`, and `research_fetches`. The dashboard can enqueue `Research next 100`/`Research all unverified`; the spawned worker logs to `data/crawler_logs/research-run-<id>.log`.
 - Research run progress shown by the API/UI is derived from `research_jobs` counts. The Scrapy spider finalizes each job as soon as that job's in-flight requests drain, so `completed`/`failed`/`needs_browser` should move during a run instead of only when the spider closes.
-- Outreach messages are cached per row unless the UI sends `force: true`; the dashboard has a `Regenerate` button for founder DMs so old generic cached messages can be replaced after prompt improvements.
+- Outreach messages are cached per row unless the UI sends `force: true`; the dashboard has regenerate buttons for founder DMs and cold emails so old generic cached messages can be replaced after prompt improvements.
 - The source sheet has separate `Company LinkedIn` and founder `Linkedin` columns. Keep them split in imports/API/UI: company profile links belong in `linkedin`, founder profile links belong in `founder_linkedin`.
