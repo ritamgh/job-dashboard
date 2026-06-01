@@ -9,6 +9,7 @@ let startups = [];
 let sortKey = 'overall_score';
 let sortDir = -1;
 let latestRunId = null;
+const messageStyles = JSON.parse(localStorage.getItem('messageStyles') || '{}');
 
 function toast(message){ toastEl.textContent = message; toastEl.classList.add('show'); setTimeout(()=>toastEl.classList.remove('show'), 3500); }
 function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -16,6 +17,12 @@ function hiringClass(s){ return String(s || '').toLowerCase(); }
 function bestHiringUrl(s){
   const urls = s.evidence_urls || [];
   return urls.find(u => /careers|jobs|join-us|join/i.test(u)) || (s.hiring_status === 'Yes' ? urls[0] : '');
+}
+function preferredMessage(s){
+  const selected = messageStyles[s.id];
+  if (selected === 'short') return s.message_short || s.message_founder || '';
+  if (selected === 'founder') return s.message_founder || s.message_short || '';
+  return s.message_founder || s.message_short || '';
 }
 function hiringEvidenceHtml(s){
   const url = bestHiringUrl(s);
@@ -105,8 +112,8 @@ function render(){
         <button class="button secondary" onclick="researchOne(${s.id})">Research</button>
         <button class="button secondary" onclick="message(${s.id}, 'short')">Short</button>
         <button class="button secondary" onclick="message(${s.id}, 'founder')">Founder DM</button>
-        <button class="button secondary" onclick="message(${s.id}, 'founder', true)" title="Ignore cached text and generate a fresh founder DM">Regenerate</button>
-        <div id="msg-${s.id}" class="message-box">${esc(s.message_short || s.message_founder || '')}</div>
+        <button class="button" onclick="message(${s.id}, 'founder', true)" title="Ignore cached text and generate a fresh founder DM">Regenerate Founder</button>
+        <div id="msg-${s.id}" class="message-box">${esc(preferredMessage(s))}</div>
       </td>
     </tr>`).join('');
 }
@@ -123,6 +130,8 @@ async function researchOne(id){
 async function message(id, style, force=false){
   const button = event?.target;
   if (button) button.disabled = true;
+  messageStyles[id] = style;
+  localStorage.setItem('messageStyles', JSON.stringify(messageStyles));
   toast(`${force ? 'Regenerating' : 'Generating'} ${style} message...`);
   const res = await fetch(`/api/startups/${id}/message`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({style, force})});
   const data = await res.json();
