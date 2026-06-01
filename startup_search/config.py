@@ -11,6 +11,10 @@ class Settings(BaseSettings):
     openai_message_model: str = 'gpt-4.1-mini'
     request_timeout_seconds: float = 12.0
     max_page_chars: int = 12000
+    serper_api_key: str | None = None
+    serper_endpoint: str = 'https://google.serper.dev/search'
+    contact_search_limit: int = 5
+    gmail_mcp_command: str | None = None
 
     model_config = SettingsConfigDict(env_file='.env', env_prefix='STARTUP_SEARCH_', extra='ignore')
 
