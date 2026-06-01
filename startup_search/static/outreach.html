@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Outreach Cockpit</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <header class="hero">
+    <div>
+      <p class="eyebrow">Personal outreach cockpit</p>
+      <h1>URL → researched outreach pack</h1>
+      <p class="subtle">Paste a company website, research it, find contact candidates with Serper, generate editable cold email + LinkedIn drafts, then send only after explicit review.</p>
+    </div>
+    <div class="actions">
+      <a class="button secondary" href="/">Dashboard</a>
+      <button id="newSession" class="button secondary">New session</button>
+    </div>
+  </header>
+
+  <main class="outreach-layout">
+    <section class="panel outreach-card">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Step 1</p>
+          <h2>Research a company</h2>
+        </div>
+        <span id="sessionBadge" class="pill">No session</span>
+      </div>
+      <div class="outreach-form">
+        <label>Website URL
+          <input id="website" placeholder="https://company.com" autocomplete="url" />
+        </label>
+        <label>Company name <span class="subtle">optional</span>
+          <input id="company" placeholder="Company name" autocomplete="organization" />
+        </label>
+      </div>
+      <div class="actions">
+        <button id="createSession" class="button">Create session</button>
+        <button id="researchCompany" class="button secondary" disabled>Research company</button>
+        <button id="findContacts" class="button secondary" disabled>Find contacts</button>
+        <button id="generateDrafts" class="button secondary" disabled>Generate drafts</button>
+      </div>
+    </section>
+
+    <section class="panel outreach-card">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Step 2</p>
+          <h2>Company intelligence</h2>
+        </div>
+      </div>
+      <div id="researchSummary" class="empty-state">Create a session, then research the company.</div>
+    </section>
+
+    <section class="panel outreach-card">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Step 3</p>
+          <h2>Contact candidates</h2>
+        </div>
+        <span class="subtle">Serper-backed, source-visible</span>
+      </div>
+      <div id="contacts" class="empty-state">No contacts yet. You can still type a recipient manually before sending.</div>
+      <label class="manual-recipient">Manual recipient email
+        <input id="manualRecipient" placeholder="founder@company.com" inputmode="email" />
+      </label>
+    </section>
+
+    <section class="panel outreach-card drafts-card">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Step 4</p>
+          <h2>Edit drafts before anything sends</h2>
+        </div>
+      </div>
+      <div id="drafts" class="empty-state">Generate drafts after research. Cold email, LinkedIn DM, and follow-up will appear here.</div>
+    </section>
+  </main>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script src="/static/outreach.js?v=outreach-1"></script>
+</body>
+</html>
