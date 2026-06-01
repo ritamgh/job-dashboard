@@ -4,12 +4,37 @@ from openai import AsyncOpenAI
 from .config import get_settings
 from .models import StartupRecord
 
-PROFILE = '''Ritam Ghosh builds agentic workflows, multi-agent systems, and RAG/CV products. He is currently a 3rd-year AI student looking for internship or project work where he can prove himself by building something useful first. His experience includes LangGraph, RAG systems, YOLO/OpenCV computer vision deployments, FastAPI/Flask backends, Docker, LangSmith observability, and vector search.'''
+PROFILE = '''Ritam Ghosh builds agentic workflows, multi-agent systems, and RAG/CV products. He is currently a 4th-year AI student looking for internship or project work where he can prove himself by building something useful first. His experience includes LangGraph, RAG systems, YOLO/OpenCV computer vision deployments, FastAPI/Flask backends, Docker, LangSmith observability, and vector search.'''
 
 NAV_PHRASES = (
     'how it works', 'product', 'products', 'pricing', 'blog', 'docs', 'documentation',
     'careers', 'customers', 'contact', 'login', 'sign in', 'sign up', 'book a demo',
 )
+
+STALE_MESSAGE_PHRASES = (
+    '[name]',
+    '[founder]',
+    'b.tech ai student at srm',
+    'found the product interesting',
+    'my strongest fit',
+    'caught my eye',
+    'possible ai internship work',
+    'short project-fit note',
+)
+
+
+def is_stale_message(message: str | None) -> bool:
+    if not message:
+        return False
+    lowered = message.lower()
+    return any(phrase in lowered for phrase in STALE_MESSAGE_PHRASES)
+
+
+def clean_generated_message(message: str) -> str:
+    message = message.strip()
+    message = re.sub(r'^hi\s+\[[^\]]+\]\s*[—-]\s*', 'Hi, ', message, flags=re.IGNORECASE)
+    message = re.sub(r'^hi\s+\[[^\]]+\][,!]?\s*', 'Hi, ', message, flags=re.IGNORECASE)
+    return message.strip()
 
 
 def clean_company_note(startup: StartupRecord, max_chars: int = 140) -> str:
@@ -119,7 +144,7 @@ def fallback_message(startup: StartupRecord, style: str) -> str:
         )
     return (
         f"Hi, I’m Ritam. I build agentic workflows, multi-agent systems, and RAG/CV products. I was looking at {startup.company} and noticed {product}.\n\n"
-        f"I’m currently a 3rd-year AI student looking for internship/project work, but I’d rather prove fit by building something useful first. For your team, I could {offer}.\n\n"
+        f"I’m currently a 4th-year AI student looking for internship/project work, but I’d rather prove fit by building something useful first. For your team, I could {offer}.\n\n"
         f"{ask}"
     )
 
@@ -133,7 +158,7 @@ async def generate_message(startup: StartupRecord, style: str) -> str:
     style_rules = (
         'Write exactly 2 sentences. No line breaks. Make it fit a connection request. Open with "I’m Ritam" plus what he builds. End by offering one specific useful idea or a small prototype, not by asking for an internship directly.'
         if style == 'short'
-        else 'Write 3 short paragraphs with line breaks. Paragraph 1 introduces Ritam as a builder and makes one natural company-specific observation. Paragraph 2 mentions he is a 3rd-year AI student looking for internship/project work, but frames credibility around building something useful first. Paragraph 3 asks permission to send one concrete idea or prototype one small problem.'
+        else 'Write 3 short paragraphs with line breaks. Paragraph 1 introduces Ritam as a builder and makes one natural company-specific observation. Paragraph 2 mentions he is a 4th-year AI student looking for internship/project work, but frames credibility around building something useful first. Paragraph 3 asks permission to send one concrete idea or prototype one small problem.'
     )
     prompt = f'''
 Write a highly specific cold LinkedIn message, {length}.
@@ -144,7 +169,8 @@ Goal: value-first outreach. The message should feel like "I noticed what you're 
 
 Quality rules:
 - Do not mention SRM University unless the user explicitly asks for it later.
-- Do not lead with "3rd-year" in founder DMs. If education appears, keep it secondary.
+- Do not use placeholders like [Name], [Founder], or {{first_name}}. Start with "Hi," or "Hi —" if no founder name is available.
+- Do not lead with year/student status in founder DMs. If education appears, keep it secondary.
 - Introduce Ritam as someone who builds agentic workflows, multi-agent systems, and RAG/CV products.
 - Do not use phrases like "found the product interesting", "my strongest fit", "caught my eye", "passionate about", or "possible AI internship work".
 - Do not paste a product description after a generic compliment.
@@ -168,4 +194,4 @@ Researched company context:
         messages=[{'role': 'system', 'content': 'You write concise, value-first founder outreach for a student builder earning internship/project opportunities by offering to build something useful first.'}, {'role': 'user', 'content': prompt}],
         temperature=0.5,
     )
-    return response.choices[0].message.content.strip()
+    return clean_generated_message(response.choices[0].message.content or '')

@@ -1,4 +1,4 @@
-from startup_search.llm import clean_company_note, closing_ask, fallback_message, help_offer, researched_context
+from startup_search.llm import clean_company_note, clean_generated_message, closing_ask, fallback_message, help_offer, is_stale_message, researched_context
 from startup_search.models import HiringStatus, StartupRecord
 
 
@@ -46,7 +46,7 @@ def test_fallback_message_uses_specific_researched_detail():
     assert 'SRM' not in message
     assert 'found the product interesting' not in message.lower()
     assert 'strongest fit' not in message.lower()
-    assert '3rd-year AI student' in message
+    assert '4th-year AI student' in message
     assert 'one concrete idea' in message
 
 
@@ -82,3 +82,19 @@ def test_researched_context_includes_crawler_evidence_for_prompt():
     assert 'Evidence URLs: https://trigger.dev, https://trigger.dev/careers' in context
     assert 'Suggested value-first offer: build a small agent/RAG workflow' in context
     assert 'Suggested closing ask: Could I send over one concrete idea?' in context
+
+
+def test_old_template_messages_are_marked_stale():
+    old = 'Hi, I’m Ritam, a 4th-year B.Tech AI student at SRM. I found the product interesting. My strongest fit is LLM agents/RAG/CV systems.'
+    fresh = fallback_message(make_startup(), 'founder')
+
+    assert is_stale_message(old)
+    assert is_stale_message('Hi [Name] — I’m Ritam, a builder.')
+    assert not is_stale_message(fresh)
+
+
+def test_generated_message_cleanup_removes_name_placeholder():
+    cleaned = clean_generated_message('Hi [Name] — I’m Ritam, and I build agentic workflows.')
+
+    assert cleaned == 'Hi, I’m Ritam, and I build agentic workflows.'
+    assert '[Name]' not in cleaned

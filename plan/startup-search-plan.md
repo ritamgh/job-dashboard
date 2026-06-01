@@ -4,7 +4,7 @@
 Build a local web dashboard that ingests a public, non-downloadable startup sheet through read-only browser scraping, researches 1.5k+ recently funded startups, ranks them for Ritam Ghosh's AI/ML internship search, and generates LinkedIn outreach messages on demand.
 
 ## User profile to optimize for
-- 3rd-year B.Tech AI student at SRM University, Chennai.
+- 4th-year B.Tech AI student at SRM University, Chennai.
 - Strongest fit: AI/ML, LLM systems, multi-agent workflows, RAG, computer vision, FastAPI/Flask, Docker, LangGraph, LangSmith, vector search.
 - Preference: remote-first globally, India onsite/hybrid acceptable.
 

@@ -8,7 +8,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from .importers import startups_from_csv, startups_from_rows
-from .llm import generate_message
+from .llm import generate_message, is_stale_message
 from .models import MessageRequest, StartupInput
 from .research import research_startup
 from .sheet_scraper import scrape_google_sheet
@@ -37,7 +37,15 @@ def index() -> str:
 
 @app.get('/api/startups')
 def api_startups(limit: int = 5000, q: str | None = None):
-    return [record.model_dump() for record in list_startups(limit=limit, query=q)]
+    rows = []
+    for record in list_startups(limit=limit, query=q):
+        data = record.model_dump()
+        if is_stale_message(data.get('message_short')):
+            data['message_short'] = None
+        if is_stale_message(data.get('message_founder')):
+            data['message_founder'] = None
+        rows.append(data)
+    return rows
 
 @app.post('/api/import/csv')
 async def import_csv(file: UploadFile = File(...)):
@@ -124,7 +132,7 @@ async def message(startup_id: int, request: MessageRequest):
     if not record:
         raise HTTPException(404, 'Startup not found')
     existing = record.message_short if request.style == 'short' else record.message_founder
-    if existing and not request.force:
+    if existing and not request.force and not is_stale_message(existing):
         return {'message': existing, 'cached': True}
     generated = await generate_message(record, request.style)
     save_message(startup_id, request.style, generated)

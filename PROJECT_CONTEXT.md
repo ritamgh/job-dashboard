@@ -5,7 +5,7 @@ Local research dashboard for ranking 1.5k+ recently funded startups for Ritam Gh
 
 ## Key user constraints
 - Optimize for balanced fit: interesting AI-native products plus realistic hiring chance.
-- User profile: 3rd-year B.Tech AI student with LangGraph agents, RAG, CV deployments, FastAPI/Flask, Docker, LangSmith, vector search.
+- User profile: 4th-year B.Tech AI student with LangGraph agents, RAG, CV deployments, FastAPI/Flask, Docker, LangSmith, vector search.
 - Logistics: remote-first globally, India onsite/hybrid acceptable.
 - Cost mode: frugal two-pass. Do not generate outreach for all companies upfront.
 
