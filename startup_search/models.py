@@ -38,6 +38,10 @@ class StartupRecord(StartupInput):
     research_confidence: int = 0
     evidence_urls: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
+    company_size_estimate: str | None = None
+    company_size_confidence: int = 0
+    company_size_source_url: str | None = None
+    company_size_source_snippet: str | None = None
     message_short: str | None = None
     message_founder: str | None = None
     message_email: str | None = None

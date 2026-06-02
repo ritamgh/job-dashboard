@@ -126,7 +126,19 @@ async function refreshSession(){
   state.session = session;
   state.contacts = session.contacts || [];
   state.drafts = session.drafts || [];
+  els.website.value = session.website || '';
+  els.company.value = session.company || '';
   render();
+}
+
+async function loadSessionFromQuery(){
+  const sessionId = new URLSearchParams(window.location.search).get('session');
+  if (!sessionId) return;
+  try {
+    state.session = {id: Number(sessionId)};
+    await refreshSession();
+    toast('Loaded dashboard email draft. Review/edit before sending.');
+  } catch (err) { toast(err.message); }
 }
 
 els.createSession.addEventListener('click', async () => {
@@ -212,3 +224,4 @@ els.drafts.addEventListener('click', async (event) => {
 });
 
 render();
+loadSessionFromQuery();

@@ -34,6 +34,10 @@ CREATE TABLE IF NOT EXISTS startups (
   research_confidence INTEGER NOT NULL DEFAULT 0,
   evidence_urls_json TEXT NOT NULL DEFAULT '[]',
   tags_json TEXT NOT NULL DEFAULT '[]',
+  company_size_estimate TEXT,
+  company_size_confidence INTEGER NOT NULL DEFAULT 0,
+  company_size_source_url TEXT,
+  company_size_source_snippet TEXT,
   message_short TEXT,
   message_founder TEXT,
   message_email TEXT,
@@ -160,6 +164,14 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
         conn.execute('ALTER TABLE startups ADD COLUMN founder_twitter TEXT')
     if 'message_email' not in columns:
         conn.execute('ALTER TABLE startups ADD COLUMN message_email TEXT')
+    if 'company_size_estimate' not in columns:
+        conn.execute('ALTER TABLE startups ADD COLUMN company_size_estimate TEXT')
+    if 'company_size_confidence' not in columns:
+        conn.execute('ALTER TABLE startups ADD COLUMN company_size_confidence INTEGER NOT NULL DEFAULT 0')
+    if 'company_size_source_url' not in columns:
+        conn.execute('ALTER TABLE startups ADD COLUMN company_size_source_url TEXT')
+    if 'company_size_source_snippet' not in columns:
+        conn.execute('ALTER TABLE startups ADD COLUMN company_size_source_snippet TEXT')
 
 @contextmanager
 def connect():
@@ -240,10 +252,16 @@ def save_message(startup_id: int, style: str, message: str) -> None:
         conn.execute(f'UPDATE startups SET {column}=?, updated_at=CURRENT_TIMESTAMP WHERE id=?', (message, startup_id))
 
 
+def save_company_size(startup_id: int, estimate: dict) -> None:
+    with connect() as conn:
+        conn.execute('''UPDATE startups SET company_size_estimate=?, company_size_confidence=?, company_size_source_url=?, company_size_source_snippet=?, updated_at=CURRENT_TIMESTAMP WHERE id=?''',
+            (estimate.get('company_size_estimate'), int(estimate.get('company_size_confidence') or 0), estimate.get('company_size_source_url'), estimate.get('company_size_source_snippet'), startup_id))
+
+
 def export_csv(path: Path) -> Path:
     records = list_startups()
     path.parent.mkdir(parents=True, exist_ok=True)
-    fields = ['id','company','website','linkedin','founder_linkedin','twitter','founder_twitter','funding','product_summary','overall_score','ai_native_score','interestingness_score','resume_fit_score','hiring_likelihood_score','learning_challenge_score','logistics_score','hiring_status','hiring_evidence','remote_india_fit','research_confidence','tags','evidence_urls','message_short','message_founder','message_email']
+    fields = ['id','company','website','linkedin','founder_linkedin','twitter','founder_twitter','funding','product_summary','overall_score','ai_native_score','interestingness_score','resume_fit_score','hiring_likelihood_score','learning_challenge_score','logistics_score','hiring_status','hiring_evidence','remote_india_fit','research_confidence','company_size_estimate','company_size_confidence','company_size_source_url','company_size_source_snippet','tags','evidence_urls','message_short','message_founder','message_email']
     with path.open('w', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=fields)
         writer.writeheader()

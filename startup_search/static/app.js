@@ -47,6 +47,17 @@ function hiringEvidenceHtml(s){
     ${url ? `<br><a class="evidence-link" href="${esc(url)}" target="_blank" rel="noreferrer">hiring evidence ↗</a>` : ''}
   `;
 }
+function companySizeHtml(s){
+  if (s.company_size_estimate) {
+    const small = /^(1-10|2-10|11-50|1\+|2\+|3\+|4\+|5\+|6\+|7\+|8\+|9\+|10\+)/.test(s.company_size_estimate);
+    return `
+      <span class="pill ${small ? 'yes' : ''}">${esc(s.company_size_estimate)}</span>
+      <br><small>${esc(s.company_size_confidence || 0)}/100 confidence${small ? ' · good founder target' : ''}</small>
+      ${s.company_size_source_url ? `<br><a class="evidence-link" href="${esc(s.company_size_source_url)}" target="_blank" rel="noreferrer">size source ↗</a>` : ''}
+    `;
+  }
+  return `<button class="button secondary compact" onclick="companySize(${s.id})">Find size</button>`;
+}
 
 async function load(){
   const q = queryEl.value.trim();
@@ -111,7 +122,7 @@ function render(){
   renderStats();
   const visible = visibleStartups();
   if (!visible.length) {
-    rowsEl.innerHTML = '<tr><td colspan="9" class="empty">No companies match the current filters. Try lowering the AI score or clearing search.</td></tr>';
+    rowsEl.innerHTML = '<tr><td colspan="10" class="empty">No companies match the current filters. Try lowering the AI score or clearing search.</td></tr>';
     return;
   }
   rowsEl.innerHTML = visible.map(s => `
@@ -122,6 +133,7 @@ function render(){
       <td>${esc(s.ai_native_score)}/10<br><small>${(s.tags || []).includes('Website-confirmed AI-native') ? 'website confirmed' : (Number(s.ai_native_score || 0) > 0 ? 'needs website confirmation' : 'no signal yet')}</small></td>
       <td>${esc(s.resume_fit_score)}/10</td>
       <td>${hiringEvidenceHtml(s)}</td>
+      <td>${companySizeHtml(s)}</td>
       <td>${esc(s.research_confidence)}/10</td>
       <td class="summary">${esc(s.product_summary || 'Not researched yet.')}<div>${(s.tags || []).map(t => `<span class="pill">${esc(t)}</span>`).join('')}</div>${(s.evidence_urls || []).slice(0,3).map(u => `<div><a href="${esc(u)}" target="_blank" rel="noreferrer">${esc(u)}</a></div>`).join('')}</td>
       <td>
@@ -131,9 +143,41 @@ function render(){
         <button class="button secondary" onclick="message(${s.id}, 'email')">Cold Email</button>
         <button class="button" onclick="message(${s.id}, 'founder', true)" title="Ignore cached text and generate a fresh founder DM">Regenerate Founder</button>
         <button class="button" onclick="message(${s.id}, 'email', true)" title="Ignore cached text and generate a fresh cold email">Regenerate Email</button>
+        <button class="button" onclick="sendEmail(${s.id})" title="Open a reviewed email draft in the Outreach Cockpit">Send Email</button>
         <div id="msg-${s.id}" class="message-box">${esc(preferredMessage(s))}</div>
       </td>
     </tr>`).join('');
+}
+
+async function companySize(id){
+  const button = event?.target;
+  if (button) button.disabled = true;
+  toast('Finding sourced company size estimate...');
+  const res = await fetch(`/api/startups/${id}/company-size`, {method:'POST'});
+  const data = await res.json();
+  if (!res.ok) {
+    toast(data.detail || 'Company size lookup failed');
+  } else if (!data.company_size_estimate) {
+    toast('No sourced company size estimate found.');
+  } else {
+    toast(`Found team size estimate: ${data.company_size_estimate}`);
+  }
+  await load();
+}
+
+async function sendEmail(id){
+  const button = event?.target;
+  if (button) button.disabled = true;
+  toast('Preparing reviewed email draft...');
+  try {
+    const res = await fetch(`/api/startups/${id}/outreach-session`, {method:'POST'});
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Could not prepare outreach session');
+    window.location.href = `/outreach?session=${encodeURIComponent(data.id)}`;
+  } catch (err) {
+    toast(err.message);
+    if (button) button.disabled = false;
+  }
 }
 
 async function researchOne(id){
@@ -213,5 +257,7 @@ queryEl.addEventListener('input', () => { clearTimeout(window.__q); window.__q =
 hiringFilterEl.addEventListener('change', render);
 minAiEl.addEventListener('input', render);
 window.sortBy = sortBy;
+window.companySize = companySize;
+window.sendEmail = sendEmail;
 load();
 setInterval(loadQueueStatus, 5000);

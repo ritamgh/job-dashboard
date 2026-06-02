@@ -7,13 +7,14 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from .company_size import estimate_company_size
 from .importers import startups_from_csv, startups_from_rows
 from .llm import generate_message, is_stale_message
-from .models import MessageRequest, OutreachDraftUpdate, OutreachSendRequest, OutreachSessionCreate, StartupInput
-from .outreach import discover_contacts, generate_drafts, research_session, send_draft
+from .models import MessageRequest, OutreachDraftUpdate, OutreachSendRequest, OutreachSessionCreate, ResearchResult, StartupInput, StartupRecord
+from .outreach import discover_contacts, generate_drafts, research_session, send_draft, split_subject_body
 from .research import research_startup
 from .sheet_scraper import scrape_google_sheet
-from .storage import apply_research, cancel_research_run, create_outreach_session, create_research_run, export_csv, get_outreach_session, get_research_run, get_startup, import_startups, latest_research_run, list_outreach_contacts, list_outreach_drafts, list_outreach_sessions, list_startups, save_message, update_outreach_draft
+from .storage import apply_research, cancel_research_run, create_outreach_draft, create_outreach_session, create_research_run, export_csv, get_outreach_session, get_research_run, get_startup, import_startups, latest_research_run, list_outreach_contacts, list_outreach_drafts, list_outreach_sessions, list_startups, save_company_size, save_message, save_outreach_research, update_outreach_draft
 
 app = FastAPI(title='Startup Search Dashboard')
 STATIC_DIR = Path(__file__).parent / 'static'
@@ -31,6 +32,24 @@ class ResearchPayload(BaseModel):
     only_unresearched: bool = True
     max_confidence: int = 6
     start_worker: bool = True
+
+
+def research_result_from_record(record: StartupRecord) -> ResearchResult:
+    return ResearchResult(
+        product_summary=record.product_summary or 'Not researched yet.',
+        ai_native_score=record.ai_native_score,
+        interestingness_score=record.interestingness_score,
+        resume_fit_score=record.resume_fit_score,
+        hiring_likelihood_score=record.hiring_likelihood_score,
+        learning_challenge_score=record.learning_challenge_score,
+        logistics_score=record.logistics_score,
+        hiring_status=record.hiring_status,
+        hiring_evidence=record.hiring_evidence or 'No hiring evidence yet.',
+        remote_india_fit=record.remote_india_fit or 'Unknown',
+        research_confidence=record.research_confidence,
+        evidence_urls=record.evidence_urls,
+        tags=record.tags,
+    )
 
 @app.get('/', response_class=HTMLResponse)
 def index() -> str:
@@ -213,6 +232,40 @@ async def message(startup_id: int, request: MessageRequest):
     generated = await generate_message(record, request.style)
     save_message(startup_id, request.style, generated)
     return {'message': generated, 'cached': False}
+
+
+@app.post('/api/startups/{startup_id}/outreach-session')
+async def startup_outreach_session(startup_id: int):
+    record = get_startup(startup_id)
+    if not record:
+        raise HTTPException(404, 'Startup not found')
+    if not record.website:
+        raise HTTPException(400, 'Startup website is required to create an outreach session')
+    session = create_outreach_session(record.website, record.company)
+    save_outreach_research(session['id'], research_result_from_record(record))
+    message_text = record.message_email
+    if not message_text or is_stale_message(message_text):
+        message_text = await generate_message(record, 'email')
+        save_message(startup_id, 'email', message_text)
+    subject, body = split_subject_body(message_text, record.company)
+    if not list_outreach_drafts(session['id']):
+        create_outreach_draft(session['id'], {'channel': 'email', 'subject': subject, 'body': body})
+    session = get_outreach_session(session['id']) or session
+    session['drafts'] = list_outreach_drafts(session['id'])
+    session['contacts'] = list_outreach_contacts(session['id'])
+    return session
+
+
+@app.post('/api/startups/{startup_id}/company-size')
+async def company_size(startup_id: int):
+    record = get_startup(startup_id)
+    if not record:
+        raise HTTPException(404, 'Startup not found')
+    estimate = await estimate_company_size(record.company, record.website, record.linkedin)
+    if not estimate:
+        return {'company_size_estimate': None, 'company_size_confidence': 0, 'company_size_source_url': None, 'company_size_source_snippet': None}
+    save_company_size(startup_id, estimate)
+    return get_startup(startup_id).model_dump()
 
 @app.get('/api/export.csv')
 def export():
